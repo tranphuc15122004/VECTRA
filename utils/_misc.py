@@ -69,8 +69,8 @@ def update_train_test_stats(args, ep, train_stats, val_stats):
     fpath = os.path.join(args.output_dir, "train_statistics.csv")
 
     header = [
-        "#EP", "#LOSS", "#PROB", "#VAL", "#BL", "#NORM",
-        "#VAL_MU", "#VAL_STD"
+        "EP", "LOSS", "PROB", "VAL", "BL", "NORM",
+        "VAL_MU", "VAL_STD"
     ]
 
     def to_float(x):
@@ -82,7 +82,6 @@ def update_train_test_stats(args, ep, train_stats, val_stats):
             return float("nan")
 
     def get_latest(vals):
-        """Lấy phần tử mới nhất nếu là list"""
         if vals is None:
             return None
         if isinstance(vals, (list, tuple)):
@@ -96,24 +95,21 @@ def update_train_test_stats(args, ep, train_stats, val_stats):
 
         vals = list(vals)
         vals = [to_float(v) for v in vals]
-
         return (vals + [float("nan")] * n)[:n]
 
     write_header = not os.path.exists(fpath)
 
-    # ---- đúng với dữ liệu của bạn ----
     tr_vals = safe_vals(train_stats, 5)
     va_vals = safe_vals(val_stats, 2)
 
+    row = [ep] + tr_vals + va_vals
+
     with open(fpath, "a") as f:
         if write_header:
-            f.write(" ".join(f"{h:>16}" for h in header) + "\n")
+            f.write(",".join(header) + "\n")
 
-        f.write(
-            f"{ep:>16d}" +
-            "".join(f"{v:>16.3g}" for v in (*tr_vals, *va_vals)) +
-            "\n"
-        )
+        f.write(",".join(f"{v:.6g}" if i > 0 else str(v)
+                         for i, v in enumerate(row)) + "\n")
 
 def _pad_with_zeros(src_it):
     yield from src_it
