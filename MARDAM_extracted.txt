@@ -1,0 +1,1099 @@
+
+
+==================== PAGE 1 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+IEEE TRANSACTIONS ON INTELLIGENT TRANSPORTATION SYSTEMS 1
+Solving Multi-Agent Routing Problems Using
+Deep Attention Mechanisms
+Guillaume Bono , Jilles S. Dibangoye, Olivier Simonin, Member, IEEE, Laëtitia Mati gnon, and Florian Pereyron
+Abstract— Routing delivery vehicles to serve customers in
+dynamic and uncertain environments like dense city centers is
+a challenging task that requires robustness and ﬂexibility. Most
+existing approaches to routing problems produce solutions ofﬂine
+in the form of plans, which only apply to the situation they have
+been optimized for. Instead, we propose to learn a policy that pro-
+vides decision rules to build the routes from online measurements
+of the environment state, including the customers conﬁguration
+itself. Doing so, we can generalize from past experiences and
+quickly provide decision rules for new instances of the problem
+without re-optimizing any parameters of our policy. The difﬁculty
+with this approach comes from the complexity to represent
+this state. In this paper, we introduce a sequential multi-agent
+decision-making model to formalize the description and the
+temporal evolution of a Dynamic and Stochastic Vehicle Routing
+Problem. We propose a variation of Deep Neural Network using
+Attention Mechanisms to learn generalizable representation of
+the state and output online decision rules adapted to dynamic and
+stochastic information. Using artiﬁcially-generated data, we show
+promising results in these dynamic and stochastic environments,
+while staying competitive in deterministic ones compared to
+ofﬂine classical heuristics.
+Index Terms— Dynamic and stochastic vehicle routing prob-
+lems, multi-agent systems, deep reinforcement learning, attention
+mechanisms.
+I. I NTRODUCTION
+T
+HE high population concentrations we reach today in
+our cities put all existing in frastructures under pressure,
+including urban road networks. The transportation needs of
+these dense areas have also b ecome more complex, with the
+development of e-commerce and services such as same-day
+deliveries, or car sharing. This context makes city logistics
+a challenging domain, with high economic stakes, and many
+Manuscript received August 27, 2019; revised April 20, 2020; accepted
+June 15, 2020. This work was supported by the industrial chair held by V olvo
+Group and operated by INSA Lyon, entitled Solutions for the Future of Road
+Freight Transport. The work of Jilles S. Dibangoye was supported by the
+ANR Project PLASMA, Planning and Learning to Act in Systems of Multiple
+Agents, under Grant 19-CE23-0018-01. The Associate Editor for this article
+was J. W. Choi. (Corresponding author: Guillaume Bono.)
+Guillaume Bono, Jilles S. Dibangoye, and Olivier Simonin are with the CITI
+Laboratory, INSA Lyon, INRIA, Université de Lyon, 69621 Villeurbanne,
+France (e-mail: guillaume.bono@insa-lyon.fr; jilles-steeve.dibangoye@
+insa-lyon.fr; olivier.simonin@insa-lyon.fr).
+Laëtitia Matignon is with LIRIS, CNRS UMR 5205, Université de Lyon,
+Université Claude Bernard Lyon 1, 69622 Villeurbanne, France (e-mail:
+laetitia.matignon@univ-lyon1.fr).
+Florian Pereyron is with Établissement de Lyon, Renault Trucks
+SAS, AB V olvo, 69806 Saint-Priest CEDEX, France (e-mail:
+ﬂorian.pereyron@volvo.com).
+This article has supplementary downloadable material available at
+http://ieeexplore.ieee.org, provided by the authors.
+Digital Object Identiﬁer 10.1109/TITS.2020.3009289
+sources of uncertainty such as varying trafﬁc conditions,
+or lack of parking space. V ehicle Routing Problem(VRP) is
+the generic abstract problem class that models multi-vehicle
+logistics. It has been extensively studied since the late 50s [1],
+and numerous extensions have been proposed to take into
+account a variety of operational constraints [2], such as
+Capacitated Vehicles and Time Windows (CVRPTW). If clas-
+sical approaches mainly focuse d on a static and deterministic
+formulation, where customers and travel costs are known
+a-priori, variants of the problem integrating someDynamic and
+Stochastic events (DS-VRPs) received i ncreasing attention in
+the last decades [3], [4]. Howeve r, the existing approaches for
+DS-VRPs still rely on hand-crafted expert heuristics deﬁning
+local operators that guide the random exploration of the
+solution space. Without additional ﬁne-tuning, this exploration
+remains quite slow for online decision making.
+When decisions should be adapted dynamically to a sto-
+chastic environment, Reinforcement Learning (RL) [5] offers
+promising tools to optimize policies that prescribe actions
+conditioned on state in a sequential decision-making process.
+Exact RL methods scale poorly with the dimensions of the
+problem, so we need approximate representation that will limit
+the class of solutions we can explore, with no optimality
+guarantees. Moreover as we want our solution to address any
+new customer conﬁguration of VRP without re-optimizing
+it, we need a way to describe and encode the problem
+statement itself. Hopefully th e generalization power of Deep
+Neural Networks (DNNs) and their capability to learn complex
+non-linear functions have open many opportunities in the ﬁeld
+of Deep RL [6]–[8], and more sp eciﬁcally their application to
+combinatorial problems [9].
+As illustrated on Fig. 1, our pr oposition called Multi-Agent
+Routing using Deep Attention Mechanisms (MARDAM) is to
+learn a policy implemented as a DNN, that quickly provides
+decision rules online to construct routes sequentially based
+on the stochastic and dynamic events happening in the envi-
+ronment. This proposition leads to three main contributions.
+First, we propose a sequential Multi-agent Markov Decision
+Process (sMMDP) that can model DS-VRPs (Sec. IV). It
+describes the evolution of the environment and the rewards
+that will guide the vehicles towards decisions minimizing the
+cost of their routes. The exact values and random distribu-
+tions of this model are not considered known a-priori. Then,
+we introduce MARDAM, a variation of Attention Model [10]
+(Sec. V) to efﬁciently encode the environment (i.e. the graph
+of customers) and the dynamic states of multiple vehicles
+acting asynchronously in an unpredictable order. From that
+1524-9050 © 2020 IEEE. Personal u se is perm itted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 2 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+2 IEEE TRANSACTIONS ON INTELLIGENT TRANSPORTATION SYSTEMS
+Fig. 1. (Best viewed in colors) General architecture of our approach. To
+model and address rich DS-VRPs, we propose a policy network, MARDAM,
+implemented using attention mechanis ms, and an event-based, multi-agent
+MDP with continuous states we call sMMDP. The different arrows illustrates
+the standard interaction and traini ng loops of Reinforcement Learning.
+encoding, we can quickly output a stochastic decision rule
+online biased by knowledge extracted from past training
+experiences. Finally, we report experimental results (Sec. VI)
+on artiﬁcial benchmarks showing how MARDAM outperforms
+heuristics on dynamic and stochastic problems, while staying
+competitive on static and deterministic ones.
+II. R
+ELATED WORK
+In this section, we will introduce the reader to existing
+work that addressed routing problems using heuristics built
+on DNNs. They provide a way to replace the hand-crafted
+expert heuristics by rich non-linear functions learned from
+data to help speed up the optimization of routes. More
+importantly they are used to generalize the class of prob-
+lems we can address by providing solutions not only for a
+single instance at a time, but for a distribution on instances.
+Referring to the uniﬁed framework introduced by Powell [11],
+this consists in augmenting the state space to be able to
+model not only a partial solution for a given instance but
+the whole instance itself, as a realization of a distribution on
+customers.
+Standard solvers [12], [13] are capable of addressing
+high-dimensional instances of static and deterministic VRPs,
+and prove the optimality of the solutions. Yet they use decision
+and state variables that can only describe solutions for a
+speciﬁc set of customers, given as a static input. Even recent
+approaches [14], [15] that use MDPs to solve shortest path
+sub-problems in “hyper-networks”
+1 are still limited to a single
+instance of the problem, and must re-optimize from scratch
+any time a new set of customers is presented.
+Recent advances in DL for graphs provide state representa-
+tions to encode problems sampled from distributions [9], [10],
+[16]. They have given birth to fast and competitive heuristics
+for combinatorial problems. The main difﬁculties are to create
+meaningful vector representations of graph-structured data and
+1Hyper-networks are graphs where nodes and edges combine static cus-
+tomers features and the capacity and time dimensions which are part of the
+dynamic vehicle state.
+to efﬁciently take into account the constraints of the problems.
+Pointer Networks [17] opened the way to generalized solutions
+for combinatorial problems using Recurrent Neural Networks
+(RNN). When introduced, they were trained using Supervised
+Learning but the architecture has soon been used as a policy in
+a RL framework [18]. Successive state-of-the-art DL methods
+have proposed more efﬁcient representations of the problem
+statements (i.e. customers sets) through dynamic linear pro-
+jections [19] or attention-based layers such as Transformer
+[10], [20], [21]. We have reached a point where DNNs can
+learn to represent instances of many problems and generalize
+knowledge extracted from data on distributions of customer
+conﬁgurations. However they only provide competitive plans
+for static and deterministic routing problems ofﬂine. Their
+application to dynamic and stochastic variants, especially in
+the multi-vehicle case, is limited, because they recast the static
+VRP as a single-vehicle problem with multiple trips to the
+depot. All of these existing structures are indeed designed
+as auto-regressive decoders which build routes sequentially
+from a recursive representation of the previous partial solution.
+This makes them unable to represent the states of dynamic
+multi-vehicle problems, where each vehicle needs an online
+representation of its state and context.
+Recently, DS-VRPs have receive d increasing attention [3].
+A large set of methods can be described in the framework of
+Multiple Scenario Approach(MSA) [22]. They still rely on the
+tools and heuristics developed for static variants to generate
+sets of anticipatory plans that get updated or discarded based
+on dynamic events. The stochastic information is taken into
+account by instantiating scenarios corresponding to a small
+subset of realizations of the random variables. Vehicles com-
+mit to an assignment based on a consensus of the sampled
+plans. Online decision rules provide an alternative to optimize
+policies that prescribe step-by-step actions based on the global
+dynamic state of the system formed by the vehicles and the
+customers. Bouzaiene-Ayari et al. [23] and Powell et al. [24]
+used Approximate Dynamic Programmingto solve Stochastic
+VRPs from historical data, using count-based statistics to
+describe the state of the ﬂeet and the pending requests and
+aggregating states to get hierarchical decision scales. Based
+on similar count-based statistics, Nguyen et al. [25] proposed
+a Policy Gradient method for a Collective Multi-Agent Plan-
+ning problem modelling the dispatching of a taxi ﬂeet. This
+count-based representation is well adapted for very large ﬂeet,
+transposing the routing problem to a resource allocation prob-
+lem, but can degenerate to expensive tabular representation for
+smaller ﬂeet.
+In this article, we propose to extend the existing DL
+methods to encode the customers features and represent the
+dynamic state of multiple vehicles in rich DS-VRPs. Doing so,
+we aim at providing efﬁcient, robust and ﬂexible policies that
+generalize from previously experienced situations to unseen
+conﬁgurations of customers, and can also adapt all vehicles
+routes online depending on unpredictable events.
+III. B
+ACKGROUND
+In this section, we will describe with more details the
+dynamic and stochastic VRP of interest. We will then
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 3 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+BONO et al.: SOLVING MULTI-AGENT ROUTING PROBLEMS USING DEEP ATTENTION MECHANISMS 3
+Fig. 2. (Best viewed in colors) Toy example of DS-CVRPTW - Both vehicles
+start at depot (diamond 0). They are routed through the clients, represented by
+circled nodes, and must adapt to newly appearing customers and unexpected
+delays on travel times. Gray edges represent valid travels. Blue and green
+edges are part of the routes of vehicle 1 and 2, respectively.
+introduce the basics of multi-ag ent MDPs that will enable us
+to model a DS-VRP as a sequential decision problem. This
+modelling choice enables us t o explore a continuous state
+space and build our routes online, and to adapt to stochastic
+and dynamic information, instead of exploring the solution
+space directly by a myopic local search. Finally we will
+describe the Actor Critic algorithm [26], [27] that we use to
+optimize our policy.
+A. DS-CVRPTW
+In a Capacitated Vehicle Routing Problem (CVRP), we
+consider a homogeneous ﬂeet of vehicles, initially parked at a
+central depot, that must be dispatched to serve clients. Vehicles
+have a limited payload capacity, and each client has its own
+demand (e.g. quantity of items to be delivered). The objective
+is to route the vehicles through all the clients while minimizing
+the total traveled distance. Additionally, some clients might
+want to be served during speciﬁc Time Windows(TW), which
+requires to keep track of time elapsed along every route, given
+the travel time from a client to another and the service duration
+at each client. If these constrai nts are strict, we call them
+hard TWs, and any solution where a customer is not served
+during its TW is invalid. Instead, for our approach, we will
+consider soft TWs. That is, vehicles will wait for customers to
+be ready, and a proportional penalty is applied to the objective
+for any late arrival. At this point the problem is referred to as
+CVRPTW.
+If any element deﬁning the problem, such as the travel
+times or the customer demands, is not constant but can
+be described as a random variable, we obtain a Stochas-
+tic CVRPTW (S-CVRPTW). Finally, we will consider a
+Dynamic S-CVRPTW (DS-CVRPTW), where a fraction of
+the customers is not known a-priori, and some of them will
+dynamically appear while the routes are being executed. In that
+case an additional objective is to balance the quality of service
+(i.e. the fraction of customers served at the end of the day)
+and the necessary detours and extra costs incurred for serving
+the initially unknown customers.
+Fig. 2 illustrates a toy problem with 4 customers and
+2 vehicles. The customers and the depot form a graph where
+each node is labeled with the features of a customer. As
+vehicles can travel from any customer to any other, the graph
+is initially fully-connected. Edges are weighted by stochastic
+distance and travel time functions. New nodes are dynamically
+inserted when a customer appears. This sequential online
+decision making process can be formalized as a multi-agent
+MDP.
+B. Multi-Agent Markov Decision Processes
+An MDP describes a system where an agent interacts with
+its environment and searches an optimal policy for prescribing
+actions, that maximize the expected cumulated sum of rewards.
+When multiple agents (in our case, vehicles) cooperate to
+achieve a common goal in a shared environment, MDPs can be
+extended to Multi-agent MDPs (MMDPs) [28], also referred
+to as team Markov Games [29], [30], or Stochastic Games
+with common payoffs [31]. The major difﬁculty that sets
+the MMDPs apart is known as the joint policy selection
+problem [32]. That is, the optimality of an individual policy is
+dependent on the policies selected by all other agents. Besides,
+there can be more than one optimal joint policy, corresponding
+to different sets of individual policies.
+A limit of this MMDP model is that at each stage, all
+agents must act in sync, whereas many scenarios are naturally
+expressed using asynchronous decisions. For example, vehi-
+cles in DS-CVRPTW choose long-lasting actions to travel to
+and serve a customer after each completed service. These time-
+extended, or durative, actions can be formalized as options
+[33], which have been used in a multi-agent setting [34], [35].
+The option framework consists in learning sub-policies that
+make the agent transition from a set of initial states to a
+set of goal states, in a stochastic number of atomic steps.
+Alternatively, [36] considered hierarchical RL in multi-agent
+systems to also add some temporal abstraction. In our case,
+we consider given and ﬁxed the sub-policies that make the
+agents navigate from one customer to the next.
+C. Policy Gradient Algorithms
+Classical methods to solve MDPs [5] include value- and
+policy-based ones. Value-based methods optimize statistics
+that satisfy the Bellman Optimality Equations [37]. Policy-
+based methods directly search in the space of policies.
+We choose an intermediate met hod called Actor-Critic [26],
+[27] borrowing from both policy-based and value-based
+approaches, also referred to as Policy Function Approxima-
+tion (PFA) and Cost Function Approximation (CFA) meta-
+classes of Policy Search in the classiﬁcation established in
+[11]. We consider a parametrized policy π(·; W
+π ) and train
+its learnable parameters Wπ following a Stochastic Gradient
+Descent (SGD) of the Reinforce loss [38]. The variance of
+the loss estimation is mitigated using a critic, i.e. a learned
+baseline bl(·; W
+bl) trained to estimate the value of the policy
+from the current state. Its parameters Wbl are updated using
+SGD of its mean prediction erro r on trajectories samples.
+IV . SEQUENTIAL DECISION -MAKING MODEL
+In this section, we will present the ﬁrst contribution
+of this article, the sequential Multi-agent Markov Decision
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 4 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+4 IEEE TRANSACTIONS ON INTELLIGENT TRANSPORTATION SYSTEMS
+Fig. 3. (Best viewed in colors) Illustration of a trajectory sampled fro m our sMMDP model for the toy exampl e of Fig. 2 - Agents 1 (top,blue) and
+2 (bottom,green) interact with a shared e nvironment on their turn, once they are done serving their previous customer. State evolves based on their in dividual
+actions (middle), synchronizing customers assignmen t when a decision is taken and keeping track of vehicles state at the end of their service. The ord er in
+which agents act is revealed at each step based on their successive actions durations. An immediate reward is associated with each action and factors i nt h e
+distance travelled and the penalty for a late arrival.
+Process (sMMDP), a variant of MMDP that we use to model
+DS-CVRPTW. It takes advantage of the duration of vehicles’
+actions and some structural hypothesis on the separability of
+the transition and reward functions to make the decisions of the
+agents sequential. It shares motivations with the event-driven
+model of [39].
+A sMMDP is formally deﬁned by a tuple
+(I,S,A, P, P
+0, R, T ). I is the set of agents interacting
+with a shared environment. For DS-CVRPTW, each agent
+i ∈ I is one of the delivery vehicles composing our ﬂeet, and
+from now on, agent and vehicle will be used interchangeably.
+The global state s
+t ∈ S at time t can be factored as individual
+states si
+t for each vehicle i (position, remaining capacity and
+next availability time), 2 and a joint environment state sE
+t for
+the features and status of every customer (hidden, pending or
+served).
+An individual action ai ∈ Ai for vehicle i consists in choos-
+ing the next customer to serve from the set of pending cus-
+tomers whose demand does not exceed the vehicle’s remaining
+capacity, or returning to depot. Similarly to Semi-Markov
+Decision Processes [40], [41], individual actions have different
+continuous durations. It has for consequences that vehicles do
+not take decisions in sync anymore. To integrate this property
+into our model, we augment the state with an additional
+variable ι
+t ∈ I that indicates which agent has to take a decision
+at the current time-step t. We redeﬁne our transition function
+P such that P(st+1,ιt+1|st ,ιt ,aιt
+t ) is now the probability of
+reaching state st+1 where agent ιt+1 has to make a decision,
+after agent ιt took action aιt
+t in state st . Which agent acts next
+depends on the time it takes to travel to the selected customers,
+wait for them to be ready, and serve them. The initial state
+distribution P
+0(s0,ι0) now also deﬁnes the ﬁrst agent to act.
+All vehicles start at depot with full capacity, and as our ﬂeet
+is homogeneous, we can choose arbitrarily the order in which
+vehicles leave.
+2The next availability time is the time at which the vehicle is done serving
+its current customer and must choose a new one
+Similarly, our immediate reward function R(st ,aιt
+t ,st+1)
+is deﬁned to evaluate individual actions, taking into account
+the distance travelled by the vehicle and its arrival time
+for potential lateness penalties. The accumulation of rewards
+yields the same objective as the original DS-CVRPTW prob-
+lem: minimize the total traveled distance and late penalties.
+Our goal is to ﬁnd individual policies π
+i ∀i that maximize
+the expected joint cumulated reward E{∑T
+t=0 R(St , Aιt
+t , St+1)}
+w.r.t. the distribution of states, turns and actions (St ,ιt , Aιt
+t ∀t)
+induced by P, P0,a n d πi ∀i ∈ I. All trajectories end after a
+ﬁnite but variable number of step T , when all vehicles have
+gone back to the depot. As the number of available actions
+can only decrease, T is bounded by the numbers of customers
+and vehicles N + M.
+Fig. 3 illustrates the trajectory of Fig. 2 in term of realiza-
+tions of the sMMDP variables. Our joint reward makes our
+model evaluate actions based on their global consequences
+for all agents, and can penalize greedy individual decisions.
+Indeed, because the accumulation of the rewards is joint, a
+decision rule providing an individual action that penalizes
+another agent later (e.g. forcing it to do a detour) will be
+tweaked to avoid this situation. The sMMDP model offers
+a trade-off to solve the coordination problem and avoid the
+exponential complexity of a joint action space, in exchange
+of an increase in the state-space dimension. It requires that
+the transition dynamics of the system can be expressed as a
+sequence of transitions caused by individual actions, which is
+fortunately the case for our model of DS-CVRPTW.
+Just as MMDPs can be solved as MDPs using a centralized
+coordinator agent, sMMDPs also have an equivalent MDP
+formulation. This coordinator agent is collecting the states,
+turns, individual actions and immediate rewards encountered
+by all agents while executing their individual policies. We can
+reinterpret these samples as coming from trajectories of the
+coordinator agent executing the policy μ : ((s
+t ,ιt ),aι
+t ) ↦→
+πιt (aι
+t |st ) in an equivalent MDP whose state space S × I
+is augmented by the turn variable and whose action space⋃
+i∈I Ai is the union of individual action spaces. If we
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 5 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+BONO et al.: SOLVING MULTI-AGENT ROUTING PROBLEMS USING DEEP ATTENTION MECHANISMS 5
+Fig. 4. (Best viewed in colors) MARDAM Policy Network - Block
+decomposition of the architecture illustrated on the toy example of Fig. 2. It
+takes as input the state st factored as customers state s Et , ﬂeet state s1t ,s2t and
+current vehicle ιt . It outputs a distribution on ac tions for the current vehicle
+ιt . Our contribution is focused on the green and blue blocks on the right, used
+to represent the internal state of the current vehicle w.r.t. its environment and
+the ﬂeet.
+restrict to homogeneous ﬂeets, we simplify even more the
+equivalence by sharing the same weights W π between all
+individual policies πi . Hence we can apply the Actor-Critic
+algorithm for MDP and inherit its convergence guarantees.
+V. P ROPOSED ARCHITECTURE
+We have seen in Sec. II that state-of-the-art of DNN can
+learn high quality heuristics to very quickly sample plans for
+any static and deterministic instances of CVRP, as long as
+they are sampled from the same distribution as training data.
+In this section, we will introduce the main contribution of
+this article, an architecture called Multi-Agent Routing Deep
+Attention Mechanism (MARDAM), designed to be used as an
+online policy for DS-CVRPTWs.
+A. Overview
+Fig. 4 describes the high-level structure of our multi-agent
+policy network, when probed for a decision by vehicle ι
+t = 1
+at step t = 6 of the running example trajectory of Fig. 2. The
+ﬁrst “customers encoder” block is borrowed from [20] and
+used as a graph encoder that outputs an embedding for every
+node (depot or customers). The second “ﬂeet state representa-
+tion” block uses the individual state of each vehicle to combine
+these embeddings to form an intermediate representation for
+each vehicle in the ﬂeet. The third “vehicle state represen-
+tation” block focuses these intermediate representations on
+the vehicle currently taking the decision to get its individual
+Fig. 5. (Best viewed in colors) One layer of a Transformer Encoder [20]
+- From previous embeddings h j
+l of every node j in the graph formed by
+the depot (0) and customers (1 , 2,3), the ﬁrst sub-layer uses a self-attention
+mechanism to gather values from nei ghboring nodes (red arrows) and create
+an intermediate representation ˆh j
+l+1 for each node (blue arrows), similarly to
+message-passing methods used to exploit graph structures. A second sub-layer
+re-project this intermediate representation to new embeddings h j
+l+1 with
+non-linear activations that extend the cla ss of kernels/functions the layer can
+learn. Both sub-layers are wra pped using skip-connections ( ∗not represented
+on the self-attention to avoid clutter.), and their output is normalized with
+running estimates of their mean and var iance (Batch-Normalization).
+internal state. Finally the last “compatibility” block scores each
+customer against this internal state to get a decision rule from
+which we can sample an action for the current vehicle.
+At the heart of all 4 blocks in our architecture lies the
+Multi-Head Attention (MHA) la yer introduced in [20]. It is
+used as a trainable aggregation function that output combina-
+tions of a set of values based on a learned similarity measure
+between their associated keys and a set of input queries. We
+will justify its usage and discuss its properties in the following
+subsections.
+B. Customers Encoder
+The “customers encoder” block in Fig. 4 is the ﬁrst entry
+point into MARDAM. It provides a mapping from the raw
+customers’ features space to a richer embedding space, where
+each customer in the input has its own embedding of greater
+dimension in the output. In thi s embedding space, relations
+between a customer and its neighbors can be represented.
+Many structures could have fulﬁlled this role, but similarly to
+[10], [21] we choose to exploit the ﬂexibility and the efﬁciency
+of the Transformer Encoder [20]. It is more sample-efﬁcient
+than other variants such as Recurrent Neural Network (RNN),
+as it is invariant to permutations of its input. Initial embeddings
+are generated from the custom ers’ features using a simple
+linear projection. Then, N
+L layers such as the one depicted
+on Fig. 5 are stacked to reﬁne this embeddings and learn
+a generalizable representation of the patterns formed by the
+customers to adapt to any instance of VRPs. The same set
+of weights can be used for any number of customers, and
+self-attention sub-layers can be easily masked to efﬁciently
+take into account the dynamic elements of our model.
+C. Internal State
+One of the central contribution of this article is the way
+we represent the state of vehicles to make our architecture
+capable of being used as an online policy in a multi-agent
+system. We illustrate on the left of Fig. 6 the two MHA
+layers that respectively fulﬁll the functions of “ﬂeet state
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 6 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+6 IEEE TRANSACTIONS ON INTELLIGENT TRANSPORTATION SYSTEMS
+Fig. 6. (Best viewed in colors) Highlights of the difference between our MARDAM model (left) a nd the Attention Model of [10] (right). On top, the h j
+NL
+are the ﬁnal embeddings of the customers, output of the Transformer Encode r. The Attention Model (right) is auto-regressive and relies on a single con text
+vector built from the mean of the embeddings and the last visited customer. We (left) create one intermediate representation for each vehicle in the ﬂe et
+computed from their continuous state measured from the environment, th en combine them based on the agent currently acting (here vehicle 1).
+representation” and “vehicle state representation” blocks from
+Fig. 4. On the right, we illustrate the difference with the
+state-of-the-art Attention Model (AM) of [10], which build
+a context vector from the embedding of the last customer
+selected. In a dynamic VRP, we need to keep track of the
+state of all vehicles at the same time, so that we can output
+decisions for every agent online. AM is initially designed
+for Travelling Salesman Problems, and is fundamentally a
+mono-agent approach. CVRP is reframed as a single vehicle
+making multiple return to the depot. In this formulation,
+routes are built one after the other and there is no way to
+represent multiple partial routes built in parallel. That’s why
+AM can only address static and deterministic CVRP ofﬂine. To
+circumvent this limitation, we propose to learn an intermediate
+representation directly from the continuous states of all the
+vehicles in the ﬂeet.
+We ﬁrst learn to combine the individual states s
+i
+t of the
+vehicles i ∈ I with the nodes’ embeddings h j
+NL that internally
+describe the problem instance and the environment state sE
+t
+in our architecture. The goal is to obtain an intermediate
+representation ρi
+t for each vehicle i at any point in time. Using
+directly the state enables our ar chitecture to learn projection
+from a continuous domain. It should help the model generalize
+to relatable situations, based on the intuition that vehicles
+with similar states should have similar options on which
+customer to serve next. We took advantage of our factored
+state structure and the ﬂexibility of the MHA layer to have
+a model than can adapt to any number of agents. We used
+a mask deﬁned per agent to express the service and capacity
+constraints. It helps dealing with the combinatorial nature of
+the problem by forcing the intermediate representation of a
+vehicle to ignore customers that it cannot serve. Then we
+focus these intermediate representations ρ
+i
+t ∀i ∈ I on the
+vehicle i currently taking the decision, to obtain its individual
+internal state qi
+t on which will be based the decision rule. This
+ﬁnal layer is meant to help the coordination between agents
+by extracting the features that cu stomize the decision rule for
+this speciﬁc agent, isolating it from the rest of the ﬂeet. It is
+also implemented using a MHA layer, so it can adapt to any
+number of agents.
+D. Compatibility
+Finally, each customer is scored against the internal state
+of the vehicle using a learned compatibility measure, which is
+normalized to get a valid probability distribution πi (·|st ).T h e
+scores are masked one last time to enforce the hard service and
+capacity constraints of the problem by forcing the probabilities
+of invalid actions to 0.
+VI. E XPERIMENTS
+To test the performances an d desirable properties of
+MARDAM, we implement artiﬁcial benchmarks on different
+variants of VRPs. We start by describing how we generate
+these benchmarks, and which methods we use to address
+them (Sec. VI-A). Then we discuss training performances and
+convergence of MARDAM on a typical case (Sec. VI-B).
+Afterwards, we test the ﬂexibility of MARDAM and its
+capacity to update its internal representations when cus-
+tomers appear dynamically along the routes in DS-CVRP-TWs
+(Sec. VI-C). Secondly, we test the adaptability and robust-
+ness offered by MARDAM against stochastic travel times in
+S-CVRP-TWs (Sec. VI-D). Finally, to further evaluate the
+generalization capabilities of MARDAM, and compare it to
+existing DL approaches [10], [19], we run a last experiment
+on deterministic CVRPs and CVRPTWs (Sec. VI-E).
+All experiments ran on a workstation equipped with a
+16-cores Intel Xeon E5-v3 CPU and a nVidia RTX2080TI
+GPU. The source code of our implementation is publicly
+available on https://gitla b.inria.fr/gbono/mardam.
+A. Experimental Setup
+We evaluate MARDAM on 4 variants of VRPs
+(DS-CVRPTW, S-CVRPTW, CVRP and CVRPTW) and
+3 different dimensions ( N = 10, 20 and 50 customers).
+For each problem and each dimension, we independently
+generate 3 sets of instances for training, testing and validation.
+Customers features are sampled from uniform distributions,
+similarly to [19] for locations and demands, to [42] for TWs,
+and to [22] for dynamic appearance. See Appendix B in the
+supplementary material for more details on the generation
+parameters.
+We implement an artiﬁcial environment from which we
+can sample trajectories based on these generated data and
+our sMMDP model of DS-CVRPTWs. We simulate stochastic
+travel times by sampling the vehicles’ speeds V
+t from a con-
+tinuous bimodal distribution: the ﬁrst mode emulates ﬂowing
+trafﬁc with base vehicle speed V
+nom and low variance σ2
+nom,
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 7 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+BONO et al.: SOLVING MULTI-AGENT ROUTING PROBLEMS USING DEEP ATTENTION MECHANISMS 7
+while the second mode corresponds to congested trafﬁc with
+reduced mean speed Vslow and higher variance σ2
+slow.T h e
+following equation formalizes this distribution :
+Pr {Vt = v}= (1 − pslow) N(v; Vnom,σ 2
+nom)
++pslow N(v; Vslow,σ 2
+slow)
+MARDAM is trained using this environment and an
+actor-critic algorithm, as illust rated in the introduction with
+Fig. 1. We have 2 decoding schemes to exploit the deci-
+sion rules output by MARDAM. “MARDAM (g)” g
+reedily
+chooses the action with maximum probability at each step.
+“MARDAM (s)” s
+amples actions from the decision rules to
+obtain 100 different trajectories, then keeps the best one.
+We obtain most of our baselines using Google’s
+ORTools [43] backed by their CP-SAT solver. It outputs plans
+for each instance of the validation sets which are then executed
+in our simulated environment. “ORTools (d)” d
+ ynamically
+replans the parts of the routes that have not been committed
+to every time a new customer appears. “BestIns” is a greedy
+online insertion heuristic we implemented. It uses ORTools
+to initialize the routes with the customers known a-priori.
+Then it tries to insert any new customer where it minimizes
+the detour cost and discards it if this cost goes over a ﬁxed
+threshold. “ORTools (o)” uses an o
+ptimistic constant speed
+Vnom to compute travel times, while “ORTools (e)” uses the
+e
+xpected value E[Vt ]= (1 − pslow)Vnom + pslowVslow.
+We include 2 state-of-the-art approaches based on DL as
+baselines for deterministic CVRP: the Attention Model (AM)
+of [10] and the Recurrent Neural Network (RNN) of [19].
+Both architectures are trained using the code provided by the
+authors. For evaluation, “AM (g)” and “AM (s)” follows the
+same decoding schemes as MARDAM. “RNN (g)” is also
+g
+reedy, while “RNN (bs)” uses a b
+ eam s
+ earch of width 10.
+For the sake of comparison, we also report the results of the
+Lin-Kernighan-Helsgaun [44] heuristic, noted “LKH3”.
+All results are reported as the mean and standard deviation
+of the total cumulated rewards on the problem instances
+of the validation sets. Cumulated rewards include travelled
+distances plus lateness and pending customers penalties. For
+DS-CVRPTWs, we also report separately the average Quality
+of Service (QoS) i.e. the fraction of customer served. Oth-
+erwise, percentages indicate r elative gaps compared to the
+starred methods in each row.
+B. Training Performances and Convergence
+To discuss the convergence of MARDAM, we illustrate on
+Fig. 7 an example of learning curves for a deterministic prob-
+lem of intermediate size, with N = 20 customers and M = 4
+vehicles. Each epoch on the horizontal axis corresponds to a
+pass through the entire training dataset. It took approximately
+6 minutes with our hardware setup.
+3 The expected cumulated
+reward estimated by the critic matches the observed rewards
+on the training set right from the ﬁrst epoch, with a slight
+tendency to overestimate the policy’s performances. It is not
+surprising, as it is only an evaluation of the current policy,
+3It took 3min/epoch for N = 10, and 22min/epoch for N = 50.
+Fig. 7. (Best viewed in color) Learning curves of MARDAM: (left) mean
+cumulated reward on training and test datasets per epoch; (up right) mean
+trajectory probability on training dataset per epoch; (mid right) sum of
+reinforce (actor) and smooth L1 (critic) loss per epoch; (down right) gradient
+norm per epoch.
+focused on a subset of states encountered during exploration.
+The Actor-Critic loss (AC loss) and gradient norm are related
+and slowly tend towards 0 as the policy converges.
+On all our curves, we notice a mode switch after approxi-
+mately 15 epochs, especially on the mean cumulated rewards
+and the mean routes/trajectories probabilities. On the former,
+we can identify two phases: before epoch 15, we have a
+very fast improvement phase and after that, we switch to
+an exponential stabilization phase. On the latter, the ﬁrst 15
+epochs are exploratory, and no particular sequences of actions
+are reinforced. After 15 epochs, we enter an exponential
+growth phase. We think that this switch appears when the
+policy has learned that leaving customers pending at the end of
+a trajectory is highly penalized, causing a discontinuity in the
+reward signal. For the ﬁrst 15 epochs, vehicles return to depot
+early and the reward is dominated by a term proportional to the
+number of customers left pending. Afterwards the policy can
+focus on improving the routes in term of travelled distances
+and lateness.
+If such training times seem prohibitive, the generalization
+capabilities offered by DL approaches easily compensate them.
+Once trained, MARDAM can solve thousands of new instances
+of the problem in a few seconds, while standard approaches
+can take hours, as shown in Table I. This online efﬁciency
+is one of the major factors motivating the usage of DL for
+routing problem.
+C. Dynamic and Stochastic CVRPTWs
+In this ﬁrst experiment, we test the ﬂexibility of MARDAM
+and its capacity to update its internal representations when
+customers appear dynamically along the routes in DS-
+CVRPTWs. We want to evaluate how MARDAM balances
+QoS and costs compared to 2 simple online baselines. Our
+results for increasing degrees of dynamism p
+dyn are reported
+in Table II.
+“BestIns” was too slow to properly run on larger instances.
+Its cost / QoS balance is driven by the threshold on the
+insertion cost. As no existing part of the routes get questioned,
+the insertion cost can quickly exceed the threshold. That is why
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 8 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+8 IEEE TRANSACTIONS ON INTELLIGENT TRANSPORTATION SYSTEMS
+TABLE I
+RUNNING TIME OF CLASSICAL HEURISTICS AND OUR NETWORK SOLVING
+THE 10000 VALIDA TION INSTANCES OF EACH PROBLEMS AND SIZE
+TABLE II
+MEAN AND STANDARD DEVIATION OF COSTS
+AND QOS IN DS-CVRP-TW S
+it has a relatively poor QoS for a relatively low cost avoiding
+detours on smaller problems. However its performance quickly
+degrades with the problem dimension.
+Although “ORTools (d)” can ignore customers, it seems
+it emphasizes the QoS over travel and lateness costs of
+detours. MARDAM maintains relatively low costs while keep-
+ing a competitive QoS for low and intermediate degree of
+dynamism, with a slight degradation for p
+dyn ≥ 60%. It
+naturally balances QoS and costs because of the reward model
+we used during training. Overall MARDAM is capable of
+efﬁciently mitigating costs degr adation without sacriﬁcing too
+much on the QoS, especially as the dimension of the instances
+increases.
+D. Stochastic CVRP-TWs
+Next, we test the adaptability and robustness offered by
+MARDAM against stochastic travel times in S-CVRPTWs. As
+an online policy, we expect it to mitigate delays and behave
+better than the ofﬂine planning baselines “ORTools (o)” and
+“ORTools (e)” which can only use a-priori statistics. Table III
+compares MARDAM and ORTools for increasing probabilities
+of slow down.
+We can see that MARDAM takes the best over both
+baselines when the slow down probability and the entropy
+of the vehicle speed increase. Even if “ORTools (e)” seems
+more robust than “ORTools (o)”, it still cannot adapt to given
+realizations of the random variables and tends to accumulate
+lateness that propagates along routes on tight schedules. This
+mostly explains the relative advantage of an online policy
+such as MARDAM compared to pre-planned routes. However,
+we note that MARDAM seems to have difﬁculties scaling
+up with the number of customers, as its performances are
+not as favorable for larger instances ( N = 50) and low
+slow probability ( p
+slow < 30). We think that this indicates
+some limitations in the capacity of MARDAM to represent
+TABLE III
+MEAN AND STANDARD DEVIATION OF COSTS IN S-CVRPTW S
+TABLE IV
+MEAN AND STANDARD DEVIATION OF COSTS
+FOR CVRP S AND CVRPTW S
+larger instances, as we can notice the same discrepancies on
+deterministic CVRPs in the ﬁnal experiment of Sec. VI-E.
+E. Deterministic CVRPs and CVRPTWs
+In this ﬁnal experiment, we are looking for a reliable point
+of comparison where classical a pproaches and heuristics are
+known to give near optimal results. Appendix C in the supple-
+mentary material provides a few illustrations of routes obtained
+by MARDAM compared to routes returned by ORTools on a
+random selection of a few CVRPTW instances. Nonetheless,
+we mostly want to compare the generalization capability of
+MARDAM to other state-of-the-art DL approaches.
+As we can see in Table IV, MARDAM is keeping up with
+ofﬂine planning methods on the CVRP, but scales poorly with
+the number of customers and vehicles. We believe it is not
+an intrinsic limitation of the method but more a question of
+engineering and ﬁne-tuning hyper-parameters.
+Surprisingly, while competitive on the largest instances, the
+performances of RNN quickly degrade the smaller the problem
+is. We suppose that this behavior is due to the absence of
+hard limitation on the number of vehicles involved. If this
+does not make a high difference to add an extra vehicle
+when the total demand of 50 customers already requires 10,
+it is much more detrimental to start one extra route when no
+more than 2 vehicles are required to cover the demand of 10
+customers. Even if not constraining the number of vehicles
+either, AM does not have the same difﬁculties, and displays
+better performances than MARDAM except when N = 10.
+When adding TW constraints, MARDAM presents favor-
+able results for smaller instances, while getting much closer
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 9 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+BONO et al.: SOLVING MULTI-AGENT ROUTING PROBLEMS USING DEEP ATTENTION MECHANISMS 9
+for the largest ones. We believe that the penalty cost used in
+LKH3 to take into account TW constraints during its search
+might not be well adapted to soft TW, and the instances we
+generated are not guaranteed to be solvable with hard TW. We
+conducted more experiments on MARDAM using stronger late
+penalties to emulate hard TW constraints in Appendix D in
+the supplementary material. Their results tend to conﬁrm that
+LKH3 is stricter than MARDAM on TWs.
+VII. D
+ISCUSSION
+In this paper, we introduced a variant of Attention Model
+called MARDAM capable of encoding the state of a Dynamic
+and Stochastic Vehicle Routing Problem, modeled as a sequen-
+tial Multi-agent Semi-Markov Decision Process. This archi-
+tecture is designed to be used as a policy interacting with the
+environment deﬁned by our model. It adapts its decision to
+build routes sequentially taking into account some stochastic
+and dynamic information feedbacks from the environment.
+The representation power offered by the Attention Mecha-
+nisms enabled us to learn policies that generalize to multiple
+scenarios and instances of DS-CVRP-TW, and output online
+decision rules competitive with existing solvers. Our MAR-
+DAM architecture is fast, ro bust and ﬂexible compared to
+myopic a-priori routes. It can efﬁciently adapt to real-time
+perturbation and appearing customers.
+This generalization power comes with a requirement for rich
+training datasets. We are not aware of any DS-CVRP-TW
+dataset large enough to properly train a DNN architecture,
+and realistic problem instances of this kind are currently
+lacking [45]. We would like to gather historical data from
+logistic companies, or at leas t build ﬁner environment using
+micro-simulation [46], to train and evaluate MARDAM on
+more realistic scenarios with road networks dynamics includ-
+ing correlated, time-dependent travel times.
+By introducing durative actions in continuous time, we
+model the problem as a sequential/event-based multi-agent
+decision process. It helps address the curse of dimensionality
+in joint action space for multi-agent systems. Alternatively,
+a new DL method [47] proposes to reduce the complexity
+of action selection in large discrete space by evaluating only
+a subset of them at each step using a projection to an
+intermediate continuous vector space. It could be interesting
+to study how to deﬁne or learn such a mapping for multi-agent
+systems.
+This paper focuses on an environment model and a policy
+structure capable of representing the different components of
+the state. However, we did not explore how its parameters
+can be trained. Recent works [48], [49] on Neuro-Evolution
+methods have explored alternatives where DNN are trained
+using evolutionary algorithm, such as Genetic Algorithms.
+Combining their training efﬁciency and the representation
+power of DNNs might be the next step to address richer
+variants of VRPs on more complex distribution of customers.
+On a ﬁnal thought, MARDAM is currently built as a
+policy where all agents have full observability. To improve
+its robustness in more realistic scenarios where perceptions
+and communication might be imperfect or delayed, we want
+to extend our model and policy to support partial local observ-
+ability and individual internal representation for every agents.
+We could borrow from the MARL community [50], [51], while
+integrating some parameters a nd experience sharing between
+agents.
+R
+EFERENCES
+[1] G. B. Dantzig and J. H. Ramser, “The truck dispatching problem,”
+Manage. Sci., vol. 6, no. 1, pp. 80–91, Oct. 1959.
+[2] P. Toth and D. Vigo, The Vehicle Routing Problem. Philadelphia, PA,
+USA: SIAM, 2002.
+[3] H. N. Psaraftis, M. Wen, and C. A. Kontovas, “Dynamic vehicle routing
+problems: Three decades and counting,” Networks, vol. 67, no. 1.
+Hoboken, NJ, USA: Wiley, Jan. 2016, pp. 3–31.
+[4] U. Ritzinger, J. Puchinger, and R. F. Hartl, “A survey on dynamic and
+stochastic vehicle routing problems,” Int. J. Prod. Res., vol. 54, no. 1,
+pp. 215–231, Jan. 2016.
+[5] R. Sutton and A. Barto, Reinforcement Learning: An Introduction. 1998.
+[6] V . Mnih et al., “Asynchronous methods for deep reinforcement learning,”
+in Proc. 33rd Int. Conf. Mach. Learn., 2016, pp. 1928–1937.
+[7] V . Mnih et al., “Human-level control through deep reinforcement learn-
+ing,” Nature, vol. 518, no. 7540, pp. 529–533, 2015.
+[8] J. Schulman, S. Levine, P. Abbeel , M. Jordan, and P. Moritz, “Trust
+region policy optimization,” inProc. 32nd Int. Conf. Mach. Learn., 2015,
+pp. 1889–1897.
+[9] Y . Bengio, A. Lodi, and A. Prouvost, “Machine learning for com-
+binatorial optimization: A methodological tour d’Horizon,” 2018,
+arXiv:1811.06128. [Online]. Available: http://arxiv.org/abs/1811.06128
+[10] W. Kool, H. van Hoof, and M. Welling, “Attention, learn to solve routing
+problems!” in Proc. Int. Conf. Learn. Represent., 2019, pp. 1–25.
+[11] W. B. Powell, “A uniﬁed framework for stochastic optimization,” Eur .
+J. Oper. Res., vol. 275, no. 3, pp. 795–821, Jun. 2019.
+[12] D. Applegate, R. Bixby, C. Vašek, and W. Cook, “On the solution
+of traveling salesman problems,” in Proc. Int. Congr. Math. Berlin,
+Germany: Deutsche Mathematiker-Vereinigung e.V ., 1998, pp. 645–656.
+[13] D. Pecin, A. Pessoa, M. Poggi, a nd E. Uchoa, “Improved branch-cut-
+and-price for capacitated vehicle routing,” Math. Program. Comput.,
+vol. 9, no. 1, pp. 61–100, Mar. 2017.
+[14] M. Mahmoudi and X. Zhou, “Finding optimal solutions for vehicle
+routing problem with pickup and delivery services with time win-
+dows: A dynamic programming approach based on state–space–time
+network representations,” Transp. Res. B, Methodol., vol. 89, pp. 19–42,
+Jul. 2016.
+[15] Y . Yao et al., “ADMM-based problem decomposition scheme for vehi-
+cle routing problem with time windows,” Transp. Res. B, Methodol.,
+vol. 129, pp. 156–174, Nov. 2019.
+[16] E. Khalil, H. Dai, Y . Zhang, B. Dilkina, and L. Song, “Learning
+combinatorial optimization algorithms over graphs,” inProc. Adv. Neural
+Inf. Process. Syst., 2017, pp. 6348–6358.
+[17] O. Vinyals, M. Fortunato, and N. Jaitly, “Pointer networks,” in Proc.
+Adv. Neural Inf. Process. Syst., 2015, pp. 2692–2700.
+[18] I. Bello, H. Pham, Q. V . Le, M. Norouzi, and S. Bengio,
+“Neural combinatorial optimization with reinforcement learning,” 2016,
+arXiv:1611.09940. [Online]. Available: http://arxiv.org/abs/1611.09940
+[19] M. Nazari, A. Oroojlooy, L. Snyder, and M. Takac, “Reinforcement
+learning for solving the vehicle routing problem,” pp. 9861–9871, 2018,
+arXiv:1802.04240. [Online]. Available: https://arxiv.org/abs/1802.04240
+[20] A. Vaswani et al., “Attention is all you need,” in Proc. Adv. Neural Inf.
+Process. Syst., 2017, pp. 5998–6008.
+[21] M. Deudon, P. Cournut, A. Lacoste, Y . Adulyasak, and L.-M. Rousseau,
+“Learning heuristics for the TSP by policy gradient,” in I
+ ntegration
+of Constraint Programming, Artiﬁcial Intelligence, and Operations
+Research. Cham, Switzerland: Springer, 2018, pp. 170–181.
+[22] R. W. Bent and P. Van Hentenryck, “Scenario-based planning for
+partially dynamic vehicle routing with stochastic customers,” Operations
+Res., vol. 52, no. 6, pp. 977–987, Dec. 2004.
+[23] B. Bouzaiene-Ayari, C. Cheng, S. Das, R. Fiorillo, and W. B. Powell,
+“From single commodity to multiattribute models for locomotive opti-
+mization: A comparison of optimal integer programming and approxi-
+mate dynamic programming,” Transp. Sci., vol. 50, no. 2, pp. 366–389,
+May 2016.
+[24] W. B. Powell, Approximate Dynamic Programming: Solving the Curses
+of Dimensionality. Hoboken, NJ, USA: Wiley, 2007.
+[25] D. T. Nguyen, A. Kumar, and H. C. Lau, “Policy gradient with value
+function approximation for collective multiagent planning,” inProc. Adv.
+Neural Inf. Process. Syst., 2017, pp. 4319–4329.
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
+
+==================== PAGE 10 ====================
+This article has been accepted for inclusion in a future issue of this journal. Content is final as presented, with the exception of pagination.
+10 IEEE TRANSACTIONS ON INTELLIGENT TRANSPORTATION SYSTEMS
+[26] V . R. Konda and J. N. Tsitsiklis, “Actor-critic algorithms,” in Proc. Adv.
+Neural Inf. Process. Syst., 2000, pp. 1008–1014.
+[27] R. S. Sutton, D. A. McAllester, S. P. Singh, and Y . Mansour, “Policy gra-
+dient methods for reinforcement lear ning with function approximation,”
+in Proc. Adv. Neural Inf. Process. Syst., 2000, pp. 1057–1063.
+[28] P. Xuan, “Modeling plan coordination in multiagent decision processes,”
+in Proc. 6th Int. Joint Conf. Auto. Agents Multiagent Syst. (AAMAS),
+2007, pp. 195–210.
+[29] M. L. Littman and C. Szepesvári, “A generalized reinforcement-learning
+model: Convergence and applications,” in Proc. 13th Int. Conf. Mach.
+Learn., 1996, pp. 310–318.
+[30] C. Szepesvári and M. L. Littman, “Generalized Markov decision
+processes: Dynamic-programming and reinforcement-learning algo-
+rithms,” Univ. Szeged, Szeged, Hungary, Tech. Rep., 1997. [Online].
+Available: https://sites.ualberta.ca/~szepesva/papers/gmdp.ps.pdf
+[31] Y . Shoham and K. Leyton-Brown, Multiagent Systems: Algorith-
+mic, Game-Theoretic , and Logical Foundations . Cambridge, U.K.:
+Cambridge Univ. Press, 2008.
+[32] C. Claus and C. Boutilier, “The dynamics of reinforcement learning in
+cooperative multiagent systems,” in Proc. 15th Nat. Conf. Artif. Intell.,
+1998, pp. 746–752.
+[33] R. S. Sutton, D. Precup, and S. Singh, “Between MDPs and semi-MDPs:
+A framework for temporal abstraction in reinforcement learning,” Artif.
+Intell., vol. 112, pp. 181–211, Aug. 1999.
+[34] J. Chakravorty et al. , “Option-critic in cooperative multi-agent
+systems,” 2019, arXiv:1911.12825. [Online]. Available: http://
+arxiv.org/abs/1911.12825
+[35] S. Omidshaﬁei, A. Agha-Mohammadi, C. Amato, S. Liu, J. P. How,
+and J. Vian, “Decentralized contro l of multi-robot partially observ-
+able Markov decision processes using belief space macro-actions,” Int.
+J. Robot. Res., vol. 36, no. 2, pp. 231–258, Feb. 2017.
+[36] M. Ghavamzadeh, S. Mahadevan, and R. Makar, “Hierarchical
+multi-agent reinforcement learning,” Auto. Agents Multi-Agent Syst. ,
+vol. 13, no. 2, pp. 197–229, Sep. 2006.
+[37] R. Bellman, “Dynamic programming,” Science, vol. 153, pp. 34–37,
+Jul. 1966.
+[38] R. J. Williams, “Simple statistical gradient-following algorithms for
+connectionist reinforcement learning,” Mach. Learn., vol. 8, nos. 3–4,
+pp. 229–256, May 1992.
+[39] K. Menda et al., “Deep reinforcement learning for event-driven multi-
+agent decision processes,” IEEE Trans. Intell. Transp. Syst., vol. 20,
+no. 4, pp. 1259–1268, Apr. 2019.
+[40] S. J. Bradtke and M. O. Duff, “Reinforcement learning methods for
+continuous-time Markov decision problems,” in Proc. Adv. Neural Inf.
+Process. Syst., 1995, pp. 393–400.
+[41] R. A. Howard, Dynamic Probabilistic Systems. Mineola, NY , USA:
+Dover, 1971.
+[42] M. M. Solomon, “Algorithms for the vehicle routing and scheduling
+problems with time window constraints,” Oper. Res., vol. 35, no. 2,
+pp. 254–265, Apr. 1987.
+[43] Google AI. (2018). Operations Research Tools. [Online]. Available:
+https://developers.google.com/optimization/
+[44] K. Helsgaun, “An extension of the lin-kernighan-helsgaun TSP solver for
+constrained traveling salesman and vehicle routing problems,” Roskilde
+Univ., Roskilde, Denmark, Tech. Rep., 2017. [Online]. Available:
+http://akira.ruc.dk/~keld/research/LKH-3/LKH-3_REPORT.pdf
+[45] G. Kim, Y .-S. Ong, C. K. Heng, P. S.T
+ an, and N. A. Zhang, “City vehicle
+routing problem (City VRP): A review,” IEEE Trans. Intell. Transp.
+Syst., vol. 16, no. 4, pp. 1654–1666, Aug. 2015.
+[46] D. Krajzewicz, J. Erdmann, M. Behrisch, and L. Bieker, “Recent
+development and applications of SUMO-simulation of Urban MObility,”
+Int. J. Adv. Syst. Meas., vol. 5, pp. 128–138, Dec. 2012.
+[47] G. Dulac-Arnold et al., “Deep reinforcement learning in large dis-
+crete action spaces,” 2015, arXiv:1512.07679. [Online]. Available:
+http://arxiv.org/abs/1512.07679
+[48] K. O. Stanley, J. Clune, J. Lehma n, and R. Miikkulainen, “Designing
+neural networks through neuroevolution,” Nature Mach. Intell.,v o l .1 ,
+no. 1, pp. 24–35, Jan. 2019.
+[49] F. Petroski Such, V . Madhavan, E. Conti, J. Lehman, K. O. Stanley,
+and J. Clune, “Deep neuroevolution: Genetic algorithms are a
+competitive alternative for training deep neural networks for rein-
+forcement learning,” 2017, arXiv:1712.06567. [Online]. Available:
+http://arxiv.org/abs/1712.06567
+[50] G. Bono, J. S. Dibangoye, L. Ma tignon, F. Pereyron, and O. Simonin,
+“Cooperative multi-agent policy gradient,” inProc. Mach. Learn. Knowl.
+Discovery Databases (ECML), 2018, pp. 459–476.
+[51] L. Busoniu, R. Babuska, and B. De Schutter, “A comprehensive survey of
+multiagent reinforcement learning,” IEEE Trans. Syst., Man, Cybern. C,
+Appl. Rev., vol. 38, no. 2, pp. 156–172, Mar. 2008.
+Guillaume Bono received the Engineering degree
+from Supélec, Paris, Metz, France, and the M.S.
+degree in computer science from Georgia Tech,
+Atlanta, GA, USA, in 2016. He is currently pursuing
+the Ph.D. degree with the CITI Laboratory, INSA
+Lyon, and a member of the INRIA Team Chroma.
+His research interests include artiﬁcial intelligence,
+speciﬁcally application of deep reinforcement learn-
+ing and multiagent decision processes to dynamic
+vehicle routing problems.
+Jilles S. Dibangoye studied mathematics and arti-
+ﬁcial intelligencet with the University of Caen
+Normandy, France. He received the Ph.D. degrees
+in computer science from the University of Caen
+Normandy, in 2009, and Laval University, Canada,
+in 2010. In 2011, he joined the Computer Science
+Group, École des Mines de Douai, France, as a
+Post-Doctoral Researcher. In 2012, he joined the
+Autonomous and Intelligent Machine Group, INRIA
+Nancy, France, where he worked under the super-
+vision of F. Charpillet and O. Buffet. Since 2014,
+he has been holding the position as an Associate Professor with INSA Lyon,
+France. His research interests include the intersection of machine learning and
+robotics, with a focus on (deep) multiagent reinforcement learning.
+Olivier Simonin (Member, IEEE) received the
+Ph.D. degree in computer science from Uni-
+versité Montpellier II in 2001 and the Habili-
+tation (French HDR Diploma) degree in 2010.
+He was an Associate Professor with the Univer-
+sité de Technologie de Belfort-Montbeliard (UTBM)
+from 2002 to 2006 and the Université de Lorraine
+Nancy 1 from 2007 to 2013 as a member of the
+LORIA Laboratory and INRIA MAIA Team. He is
+currently a Full Professor with INSA Lyon, Univer-
+sity of Lyon, and the CITI Laboratory, France. Since
+2015, he has been the Head of the INRIA CHROMA Team. His main research
+interests include decentralized AI, s warm robotics, and multiagent systems.
+His main application domains are mob ile robots, autonomous vehicles, and
+transportation.
+Laëtitia Matignon received the Engineering degree
+in mechanics in 2005 and the Ph.D. degree in
+control systems and computer sciences from the
+University of Franche-Comté in 2008. She is cur-
+rently an Associate Professor with Claude Bernard
+University Lyon 1, France. She is a member of the
+LIRIS laboratory, UMR CNRS 5205, Multi-Agent
+System Team. Her expertise and interests include
+artiﬁcial intelligence, especially decision processes
+under uncertainty and learning methods (reinforce-
+ment learning and developmental learning), and their
+applications to robotics.
+Florian Pereyron received the M.Sc. degree in
+mechanics from Claude Bernard University Lyon 1,
+France, in 2008. He is currently the Lead Research
+Engineer with V olvo Group. His research interests
+include mathematical optimization, models and con-
+trol with applications to systems engineering for
+advanced driver-assistance systems, and alternative
+powertrain development.
+Authorized licensed use limited to: Carleton University. Downloaded on August 07,2020 at 12:29:42 UTC from IEEE Xplore.  Restrictions apply. 
