@@ -63,6 +63,57 @@ def export_train_test_stats(args, start_ep, train_stats, test_stats):
                 "".join(f"{v:>16.3g}" for v in (*tr_vals, *te_vals)) +
                 "\n"
             )
+    
+def update_train_test_stats(args, ep, train_stats, val_stats):
+    os.makedirs(args.output_dir, exist_ok=True)
+    fpath = os.path.join(args.output_dir, "train_statistics.csv")
+
+    header = [
+        "#EP", "#LOSS", "#PROB", "#VAL", "#BL", "#NORM",
+        "#VAL_MU", "#VAL_STD"
+    ]
+
+    def to_float(x):
+        if isinstance(x, torch.Tensor):
+            return x.detach().float().cpu().item()
+        try:
+            return float(x)
+        except Exception:
+            return float("nan")
+
+    def get_latest(vals):
+        """Lấy phần tử mới nhất nếu là list"""
+        if vals is None:
+            return None
+        if isinstance(vals, (list, tuple)):
+            return vals[-1]
+        return vals
+
+    def safe_vals(vals, n):
+        vals = get_latest(vals)
+        if vals is None:
+            return [float("nan")] * n
+
+        vals = list(vals)
+        vals = [to_float(v) for v in vals]
+
+        return (vals + [float("nan")] * n)[:n]
+
+    write_header = not os.path.exists(fpath)
+
+    # ---- đúng với dữ liệu của bạn ----
+    tr_vals = safe_vals(train_stats, 5)
+    va_vals = safe_vals(val_stats, 2)
+
+    with open(fpath, "a") as f:
+        if write_header:
+            f.write(" ".join(f"{h:>16}" for h in header) + "\n")
+
+        f.write(
+            f"{ep:>16d}" +
+            "".join(f"{v:>16.3g}" for v in (*tr_vals, *va_vals)) +
+            "\n"
+        )
 
 def _pad_with_zeros(src_it):
     yield from src_it

@@ -238,7 +238,7 @@ def main(args):
     else:
         optim = Adam(learner.parameters(), args.learning_rate)
         if args.rate_decay is not None:
-            lr_sched = LambdaLR(optim, lambda ep: args.learning_rate * args.rate_decay**ep)
+            lr_sched = LambdaLR(optim, lambda ep: args.rate_decay**ep)
     verbose_print("Done.")
 
     # CHECKPOINTING
@@ -270,7 +270,7 @@ def main(args):
                 test_stats.append( test_epoch(args, test_env, learner, ref_costs) )
             
             val_stats.append(val_epoch(args , test_env , learner))
-            export_train_test_stats(args, start_ep, train_stats, val_stats)
+            update_train_test_stats(args, ep, train_stats, val_stats)
 
             if args.rate_decay is not None:
                 lr_sched.step()
