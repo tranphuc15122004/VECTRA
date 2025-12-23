@@ -80,7 +80,7 @@ def test_epoch(args, test_env, learner, ref_costs):
     print("Cost on test dataset: {:5.2f} +- {:5.2f} ({:.2%})".format(mean, std, gap))
     return mean.item(), std.item(), gap.item()
 
-def train_test_epoch(args, test_env, learner):
+def val_epoch(args, test_env, learner):
     learner.eval()
     if args.problem_type[0] == "s":
         costs = test_env.nodes.new_zeros(test_env.minibatch_size)
@@ -224,9 +224,16 @@ def main(args):
             ])
         if args.rate_decay is not None:
             critic_decay = args.rate_decay if args.critic_decay is None else args.critic_decay
-            lr_sched = LambdaLR(optim,[
+            
+            """ lr_sched = LambdaLR(optim,[
                 lambda ep: args.learning_rate * args.rate_decay**ep,
                 lambda ep: args.critic_rate * critic_decay**ep
+                ])
+             """
+            
+            lr_sched = LambdaLR(optim,[
+                lambda ep: args.rate_decay**ep,
+                lambda ep: critic_decay**ep
                 ])
     else:
         optim = Adam(learner.parameters(), args.learning_rate)
@@ -261,9 +268,9 @@ def main(args):
             train_stats.append( train_epoch(args, train_data, Environment, env_params, baseline, optim, dev, ep) )
             if ref_routes is not None:
                 test_stats.append( test_epoch(args, test_env, learner, ref_costs) )
-
-            if ep % 5==0:
-                export_train_test_stats(args, start_ep, train_stats, test_stats)
+            
+            val_stats.append(val_epoch(args , test_env , learner))
+            export_train_test_stats(args, start_ep, train_stats, val_stats)
 
             if args.rate_decay is not None:
                 lr_sched.step()
