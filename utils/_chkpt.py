@@ -63,3 +63,34 @@ def load_checkpoint(args, learner, optim, baseline = None, lr_sched = None):
     if args.baseline_type == "critic":
         baseline.load_state_dict(checkpoint["critic"])
     return checkpoint["ep"]
+
+def load_model_weights(args, learner, device="cpu", strict=True):
+    """
+    Chỉ load trọng số model (policy network), dùng cho:
+    - inference
+    - fine-tune
+    - eval
+    - warm-start training (optimizer reset)
+
+    Args:
+        args.resume_state: đường dẫn checkpoint
+        learner: nn.Module
+        device: "cpu" | "cuda"
+        strict: load strict hay không
+    """
+    checkpoint = torch.load(args.resume_state, map_location=device)
+
+    # Trường hợp checkpoint lưu full dict
+    if "model" in checkpoint:
+        state_dict = checkpoint["model"]
+    else:
+        # Trường hợp checkpoint chỉ là state_dict
+        state_dict = checkpoint
+
+    missing, unexpected = learner.load_state_dict(state_dict, strict=strict)
+
+    if not strict:
+        print(f"[load_model_weights] missing keys: {len(missing)}")
+        print(f"[load_model_weights] unexpected keys: {len(unexpected)}")
+
+    return learner

@@ -64,35 +64,38 @@ def train_epoch(args, data, Environment, env_params, bl_wrapped_learner, optim, 
 
 def test_epoch(args, test_env, learner, ref_costs):
     learner.eval()
-    if args.problem_type[0] == "s":
-        costs = test_env.nodes.new_zeros(test_env.minibatch_size)
-        for _ in range(100):
-            _, _, rewards = learner(test_env)
-            costs -= torch.stack(rewards).sum(0).squeeze(-1)
-        costs = costs / 100
-    else:
-        _, _, rs = learner(test_env)
-        costs = -torch.stack(rs).sum(dim = 0).squeeze(-1)
-    mean = costs.mean()
-    std = costs.std()
-    gap = (costs.to(ref_costs.device) / ref_costs - 1).mean()
+    with torch.no_grad():   # 🔥 BẮT BUỘC
+        
+        if args.problem_type[0] == "s":
+            costs = test_env.nodes.new_zeros(test_env.minibatch_size)
+            for _ in range(100):
+                _, _, rewards = learner(test_env)
+                costs -= torch.stack(rewards).sum(0).squeeze(-1)
+            costs = costs / 100
+        else:
+            _, _, rs = learner(test_env)
+            costs = -torch.stack(rs).sum(dim = 0).squeeze(-1)
+        mean = costs.mean()
+        std = costs.std()
+        gap = (costs.to(ref_costs.device) / ref_costs - 1).mean()
 
     print("Cost on test dataset: {:5.2f} +- {:5.2f} ({:.2%})".format(mean, std, gap))
     return mean.item(), std.item(), gap.item()
 
 def val_epoch(args, test_env, learner):
     learner.eval()
-    if args.problem_type[0] == "s":
-        costs = test_env.nodes.new_zeros(test_env.minibatch_size)
-        for _ in range(100):
-            _, _, rewards = learner(test_env)
-            costs -= torch.stack(rewards).sum(0).squeeze(-1)
-        costs = costs / 100
-    else:
-        _, _, rs = learner(test_env)
-        costs = -torch.stack(rs).sum(dim = 0).squeeze(-1)
-    mean = costs.mean()
-    std = costs.std()
+    with torch.no_grad():   # 🔥 BẮT BUỘC
+        if args.problem_type[0] == "s":
+            costs = test_env.nodes.new_zeros(test_env.minibatch_size)
+            for _ in range(100):
+                _, _, rewards = learner(test_env)
+                costs -= torch.stack(rewards).sum(0).squeeze(-1)
+            costs = costs / 100
+        else:
+            _, _, rs = learner(test_env)
+            costs = -torch.stack(rs).sum(dim = 0).squeeze(-1)
+        mean = costs.mean()
+        std = costs.std()
 
     print("Cost on test dataset: {:5.2f} +- {:5.2f}".format(mean, std))
     return mean.item(), std.item()
