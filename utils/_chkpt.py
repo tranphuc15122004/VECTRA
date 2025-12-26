@@ -78,7 +78,7 @@ def load_model_weights(args, learner, device="cpu", strict=True):
         device: "cpu" | "cuda"
         strict: load strict hay không
     """
-    checkpoint = torch.load(args.resume_state, map_location=device)
+    checkpoint = torch.load(args.model_weight, map_location=device)
 
     # Trường hợp checkpoint lưu full dict
     if "model" in checkpoint:

@@ -261,6 +261,10 @@ def main(args):
         start_ep = 0
     else:
         start_ep = load_checkpoint(args, learner, optim, baseline, lr_sched)
+        
+    
+    learner = load_model_weights(args , learner , dev)
+    
 
     verbose_print("Running...")
     train_stats = []

@@ -57,6 +57,7 @@ TEST_BATCH_SIZE = 128
 
 OUTPUT_DIR = None
 RESUME_STATE = None
+MODEL_WEIGHT = None
 CHECKPOINT_PERIOD = 5
 
 
@@ -133,6 +134,8 @@ def parse_args(argv = None):
     group.add_argument("--output-dir", "-o", type = str, default = OUTPUT_DIR)
     group.add_argument("--checkpoint-period", "-c", type = int, default = CHECKPOINT_PERIOD)
     group.add_argument("--resume-state", type = str, default = RESUME_STATE)
+    group.add_argument("--model-weight", type = str, default = MODEL_WEIGHT)
+    
 
     args = parser.parse_args(argv)
     if args.config_file is not None:
