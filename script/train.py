@@ -263,7 +263,7 @@ def main(args):
         start_ep = load_checkpoint(args, learner, optim, baseline, lr_sched)
         
     
-    learner = load_model_weights(args , learner , dev)
+    load_model_weights(args , learner )
     
 
     verbose_print("Running...")

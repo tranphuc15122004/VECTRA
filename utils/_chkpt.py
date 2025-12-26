@@ -64,33 +64,71 @@ def load_checkpoint(args, learner, optim, baseline = None, lr_sched = None):
         baseline.load_state_dict(checkpoint["critic"])
     return checkpoint["ep"]
 
-def load_model_weights(args, learner, device="cpu", strict=True):
+import torch
+
+def load_model_weights(args, learner,  strict=True):
     """
-    Chỉ load trọng số model (policy network), dùng cho:
+    Load only model weights (policy network), in-place.
+
+    Used for:
     - inference
     - fine-tune
     - eval
     - warm-start training (optimizer reset)
 
     Args:
-        args.resume_state: đường dẫn checkpoint
-        learner: nn.Module
-        device: "cpu" | "cuda"
-        strict: load strict hay không
+        args.model_weight: path to checkpoint or state_dict
+        learner: nn.Module (updated in-place)
+        device: map_location for torch.load
+        strict: whether to load strictly
     """
-    checkpoint = torch.load(args.model_weight, map_location=device)
+    path = getattr(args, "model_weight", None)
+    if not path:
+        print("[load_model_weights] No --model-weight provided; skip loading.")
+        return
 
-    # Trường hợp checkpoint lưu full dict
-    if "model" in checkpoint:
+    try:
+        checkpoint = torch.load(path)
+    except Exception as e:
+        print(f"[load_model_weights] ERROR loading '{path}': {e}")
+        return
+
+    # Determine checkpoint format
+    if isinstance(checkpoint, dict) and "model" in checkpoint and isinstance(checkpoint["model"], dict):
         state_dict = checkpoint["model"]
-    else:
-        # Trường hợp checkpoint chỉ là state_dict
+        source = "checkpoint['model']"
+    elif isinstance(checkpoint, dict):
         state_dict = checkpoint
+        source = "state_dict"
+    else:
+        print(f"[load_model_weights] Unexpected checkpoint format: {type(checkpoint)}")
+        return
 
-    missing, unexpected = learner.load_state_dict(state_dict, strict=strict)
+    # Load weights (in-place)
+    try:
+        res = learner.load_state_dict(state_dict, strict=strict)
+    except Exception as e:
+        print(f"[load_model_weights] ERROR applying state_dict (strict={strict}): {e}")
+        return
 
-    if not strict:
-        print(f"[load_model_weights] missing keys: {len(missing)}")
-        print(f"[load_model_weights] unexpected keys: {len(unexpected)}")
+    # Normalize missing / unexpected keys across PyTorch versions
+    if isinstance(res, (tuple, list)):
+        missing, unexpected = res
+    else:
+        missing = res.missing_keys
+        unexpected = res.unexpected_keys
 
-    return learner
+    provided = len(state_dict)
+    model_keys = len(learner.state_dict())
+    matched = sum(1 for k in state_dict if k in learner.state_dict())
+
+    print(
+        f"[load_model_weights] Loaded from '{path}' ({source}) | "
+        f"provided={provided}, matched={matched}, model_keys={model_keys}, "
+        f"missing={len(missing)}, unexpected={len(unexpected)}, strict={strict}"
+    )
+
+    if missing:
+        print(f"[load_model_weights] Sample missing keys ({len(missing)}): {missing[:10]}")
+    if unexpected:
+        print(f"[load_model_weights] Sample unexpected keys ({len(unexpected)}): {unexpected[:10]}")
