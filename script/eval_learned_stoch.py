@@ -1,5 +1,5 @@
 from _learner import AttentionLearner
-from problems import SVRPTW_Environment
+from problems import SVRPTW_Environment , VRPTW_Environment
 from dep import tqdm
 from utils import load_old_weights
 
