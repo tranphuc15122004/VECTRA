@@ -36,6 +36,10 @@ LAYER_COUNT = 3
 HEAD_COUNT = 8
 FF_SIZE = 512
 TANH_XPLOR = 10
+EDGE_FEAT_SIZE = 8
+FLEET_K = 6
+MEMORY_SIZE = None
+LOOKAHEAD_HIDDEN = 128
 
 EPOCH_COUNT = 20
 ITER_COUNT = 1000
@@ -107,6 +111,10 @@ def parse_args(argv = None):
     group.add_argument("--head-count", type = int, default = HEAD_COUNT)
     group.add_argument("--ff-size", type = int, default = FF_SIZE)
     group.add_argument("--tanh-xplor", type = float, default = TANH_XPLOR)
+    group.add_argument("--edge-feat-size", type = int, default = EDGE_FEAT_SIZE)
+    group.add_argument("--fleet-k", type = int, default = FLEET_K)
+    group.add_argument("--memory-size", type = int, default = MEMORY_SIZE)
+    group.add_argument("--lookahead-hidden", type = int, default = LOOKAHEAD_HIDDEN)
 
     group = parser.add_argument_group("Training parameters")
     group.add_argument("--epoch-count", "-e", type = int, default = EPOCH_COUNT)

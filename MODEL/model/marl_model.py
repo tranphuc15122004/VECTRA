@@ -14,7 +14,7 @@ import torch.nn.functional as F
 class EdgeEnhencedLearner(nn.Module):
     def __init__(self, cust_feat_size, veh_state_size, model_size = 128,
             layer_count = 3, head_count = 8, ff_size = 512, tanh_xplor = 10, greedy = False,
-            edge_feat_size = 8, fleet_k = 6, memory_size = None, lookahead_hidden = 128):
+            edge_feat_size = 8, fleet_k = 5, memory_size = None, lookahead_hidden = 128):
         r"""
         :param model_size:  Dimension :math:`D` shared by all intermediate layers
         :param layer_count: Number of layers in customers' (graph) Transformer Encoder
@@ -99,9 +99,9 @@ class EdgeEnhencedLearner(nn.Module):
         if customers.size(-1) >= 5:
             tw_start = customers[:, :, 3:4].transpose(1, 2)
             tw_end = customers[:, :, 4:5].transpose(1, 2)
-            wait = (tw_start - arrival).clamp(min = 0)
-            late = (arrival - tw_end).clamp(min = 0)
-            slack = (tw_end - arrival)
+            wait = (tw_start - arrival).clamp(min = 0).unsqueeze(-1)
+            late = (arrival - tw_end).clamp(min = 0).unsqueeze(-1)
+            slack = (tw_end - arrival).unsqueeze(-1)
         else:
             wait = dist.new_zeros(dist.size()).unsqueeze(-1)
             late = dist.new_zeros(dist.size()).unsqueeze(-1)

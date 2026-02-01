@@ -195,7 +195,12 @@ def main(args):
             args.layer_count,
             args.head_count,
             args.ff_size,
-            args.tanh_xplor
+            args.tanh_xplor,
+            False,
+            args.edge_feat_size,
+            args.fleet_k,
+            args.memory_size,
+            args.lookahead_hidden
             )
     learner.to(dev)
     verbose_print("Done.")

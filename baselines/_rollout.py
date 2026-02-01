@@ -12,10 +12,31 @@ class RolloutBaseline(Baseline):
             raise RuntimeError("Cannot use rollout baseline without scipy.stats.ttest_rel")
 
         self.learner = learner
-        self.policy = copy.deepcopy(learner)
+        self.policy = self._safe_deepcopy(learner)
         self.policy.eval()
         self.count = rollout_count
         self.thresh = update_threshold
+
+    def _safe_deepcopy(self, learner):
+        cached = {}
+        for name, value in learner.__dict__.items():
+            if torch.is_tensor(value) and value.requires_grad and not value.is_leaf:
+                cached[name] = value
+                setattr(learner, name, None)
+            elif torch.is_tensor(value) and not value.is_leaf:
+                cached[name] = value
+                setattr(learner, name, None)
+            elif isinstance(value, (list, dict)):
+                continue
+            elif hasattr(value, "requires_grad") and not getattr(value, "is_leaf", True):
+                cached[name] = value
+                setattr(learner, name, None)
+        try:
+            copied = copy.deepcopy(learner)
+        finally:
+            for name, value in cached.items():
+                setattr(learner, name, value)
+        return copied
 
     def eval(self, dyna):
         val = []

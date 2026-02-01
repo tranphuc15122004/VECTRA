@@ -66,7 +66,12 @@ class GraphEncoderLayer(nn.Module):
 		ff = self.ff2(F.relu(self.ff1(h)))
 		h_out = self.norm2(h + ff)
 		if mask is not None:
-			h_out[mask] = 0
+			if mask.dim() == 2:
+				h_out[mask] = 0
+			elif mask.dim() == 3:
+				node_mask = mask.all(dim = -1)
+				if node_mask.any():
+					h_out[node_mask] = 0
 		return h_out
 
 
@@ -111,7 +116,12 @@ class FleetEncoderLayer(nn.Module):
 		ff = self.ff2(F.relu(self.ff1(h)))
 		h_out = self.norm2(h + ff)
 		if mask is not None:
-			h_out[mask] = 0
+			if mask.dim() == 2:
+				h_out[mask] = 0
+			elif mask.dim() == 3:
+				node_mask = mask.all(dim = -1)
+				if node_mask.any():
+					h_out[node_mask] = 0
 		return h_out
 
 
