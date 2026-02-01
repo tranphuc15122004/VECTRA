@@ -9,6 +9,7 @@ from utils import *
 from layers import reinforce_loss
 
 import torch
+from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from torch.optim import Adam 
 from torch.optim.lr_scheduler import LambdaLR
@@ -19,9 +20,16 @@ import os
 from itertools import chain
 
 
-def train_epoch(args, data, Environment, env_params, bl_wrapped_learner, optim, device, ep):
+def train_epoch(args, data, Environment, env_params, bl_wrapped_learner, optim, device, ep, scaler: GradScaler):
     bl_wrapped_learner.learner.train()
-    loader = DataLoader(data, args.batch_size, True)
+    loader = DataLoader(
+        data,
+        args.batch_size,
+        True,
+        num_workers = args.num_workers,
+        pin_memory = args.pin_memory,
+        persistent_workers = args.num_workers > 0,
+    )
 
     ep_loss = 0
     ep_prob = 0
@@ -36,19 +44,33 @@ def train_epoch(args, data, Environment, env_params, bl_wrapped_learner, optim, 
                 custs, mask = minibatch[0].to(device), minibatch[1].to(device)
 
             dyna = Environment(data, custs, mask, *env_params)
-            actions, logps, rewards, bl_vals = bl_wrapped_learner(dyna)
-            loss = reinforce_loss(logps, rewards, bl_vals)
+            with autocast(enabled = args.amp):
+                actions, logps, rewards, bl_vals = bl_wrapped_learner(dyna)
+                loss = reinforce_loss(logps, rewards, bl_vals)
 
             prob = torch.stack(logps).sum(0).exp().mean()
             val = torch.stack(rewards).sum(0).mean()
             bl = bl_vals[0].mean()
 
             optim.zero_grad()
-            loss.backward()
-            if args.max_grad_norm is not None:
-                grad_norm = clip_grad_norm_(chain.from_iterable(grp["params"] for grp in optim.param_groups),
-                        args.max_grad_norm)
-            optim.step()
+            if args.amp:
+                scaler.scale(loss).backward()
+                if args.max_grad_norm is not None:
+                    scaler.unscale_(optim)
+                    grad_norm = clip_grad_norm_(
+                        chain.from_iterable(grp["params"] for grp in optim.param_groups),
+                        args.max_grad_norm,
+                    )
+                scaler.step(optim)
+                scaler.update()
+            else:
+                loss.backward()
+                if args.max_grad_norm is not None:
+                    grad_norm = clip_grad_norm_(
+                        chain.from_iterable(grp["params"] for grp in optim.param_groups),
+                        args.max_grad_norm,
+                    )
+                optim.step()
 
             progress.set_postfix_str("l={:.4g} p={:9.4g} val={:6.4g} bl={:6.4g} |g|={:.4g}".format(
                 loss, prob, val, bl, grad_norm))
@@ -102,6 +124,7 @@ def val_epoch(args, test_env, learner):
 
 def main(args):
     dev = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    torch.backends.cudnn.benchmark = True
     if args.rng_seed is not None:
         torch.manual_seed(args.rng_seed)
 
@@ -270,9 +293,10 @@ def main(args):
     train_stats = []
     val_stats = []
     test_stats = []
+    scaler = GradScaler(enabled = args.amp)
     try:
         for ep in range(start_ep, args.epoch_count):
-            train_stats.append( train_epoch(args, train_data, Environment, env_params, baseline, optim, dev, ep) )
+            train_stats.append( train_epoch(args, train_data, Environment, env_params, baseline, optim, dev, ep, scaler) )
             if ref_routes is not None:
                 test_stats.append( test_epoch(args, test_env, learner, ref_costs) )
             

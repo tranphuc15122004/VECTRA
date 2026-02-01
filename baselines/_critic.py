@@ -5,10 +5,17 @@ import torch.nn as nn
 
 
 class CriticBaseline(Baseline):
-    def __init__(self, learner, cust_count, use_qval = True, use_cumul_reward = False):
+    def __init__(self, learner, cust_count, use_qval = True, use_cumul_reward = False, hidden_size = None):
         super().__init__(learner, use_cumul_reward)
         self.use_qval = use_qval
-        self.project = nn.Linear(cust_count+1, cust_count+1 if use_qval else 1, bias = False)
+        if hidden_size is None:
+            hidden_size = 128
+        out_size = cust_count + 1 if use_qval else 1
+        self.project = nn.Sequential(
+            nn.Linear(cust_count + 1, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, out_size)
+        )
 
     def eval_step(self, vrp_dynamics, learner_compat, cust_idx):
         compat = learner_compat.clone()

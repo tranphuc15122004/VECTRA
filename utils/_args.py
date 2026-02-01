@@ -49,6 +49,9 @@ LR_DECAY = None
 MAX_GRAD_NORM = 2
 GRAD_NORM_DECAY = None
 LOSS_USE_CUMUL = False
+AMP = False
+NUM_WORKERS = 4
+PIN_MEMORY = True
 
 BASELINE = "none"
 ROLLOUT_COUNT = 3
@@ -125,6 +128,9 @@ def parse_args(argv = None):
     group.add_argument("--max-grad-norm", type = float, default = MAX_GRAD_NORM)
     group.add_argument("--grad-norm-decay", type = float, default = GRAD_NORM_DECAY)
     group.add_argument("--loss-use-cumul", action = "store_true", default = LOSS_USE_CUMUL)
+    group.add_argument("--amp", action = "store_true", default = AMP)
+    group.add_argument("--num-workers", type = int, default = NUM_WORKERS)
+    group.add_argument("--pin-memory", action = "store_true", default = PIN_MEMORY)
 
     group = parser.add_argument_group("Baselines parameters")
     group.add_argument("--baseline-type", type = str,
