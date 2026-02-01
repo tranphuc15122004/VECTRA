@@ -11,7 +11,7 @@ from  baselines._base import Baseline
 import torch
 from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
-from torch.optim import Adam , AdamW
+from torch.optim import Adam 
 from torch.optim.lr_scheduler import LambdaLR
 from torch.nn.utils import clip_grad_norm_
 from problems import *
@@ -223,8 +223,7 @@ def main(args):
             args.edge_feat_size,
             args.cust_k,
             args.memory_size,
-            args.lookahead_hidden,
-            args.dropout
+            args.lookahead_hidden
             )
     learner.to(dev)
     verbose_print("Done.")
@@ -251,9 +250,9 @@ def main(args):
         end = " ", flush = True)
     lr_sched = None
     if args.baseline_type == "critic":
-        optim = AdamW([
-            {"params": learner.parameters(), "lr": args.learning_rate, "weight_decay": args.weight_decay},
-            {"params": baseline.parameters(), "lr": args.critic_rate, "weight_decay": args.weight_decay}
+        optim = Adam([
+            {"params": learner.parameters(), "lr": args.learning_rate},
+            {"params": baseline.parameters(), "lr": args.critic_rate}
             ])
         if args.rate_decay is not None:
             critic_decay = args.rate_decay if args.critic_decay is None else args.critic_decay
@@ -269,7 +268,7 @@ def main(args):
                 lambda ep: critic_decay**ep
                 ])
     else:
-        optim = AdamW(learner.parameters(), args.learning_rate, weight_decay = args.weight_decay)
+        optim = Adam(learner.parameters(), args.learning_rate)
         if args.rate_decay is not None:
             lr_sched = LambdaLR(optim, lambda ep: args.rate_decay**ep)
     verbose_print("Done.")

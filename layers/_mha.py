@@ -155,13 +155,6 @@ class _MHA_V2(nn.Module):
                 m = mask.view(-1,1,l_q,l_kv).expand_as(weights)
             else: # common mask for all queries
                 m = mask.view(-1,1,1,l_kv).expand_as(weights)
-            
-            # Prevent all-masked rows causing nan in softmax
-            all_masked = m.all(dim = -1, keepdim = True)
-            if all_masked.any():
-                m = m.clone()
-                m.masked_fill_(all_masked, False)
-                
             weights[m] = -float('inf')
         weights = F.softmax(weights, dim = -1)
 
@@ -337,13 +330,6 @@ class MixedScore_MultiHeadAttention(nn.Module):
                 m = mask.view(-1, 1, l_q, l_kv).expand_as(mixed_scores)
             else:  # common mask for all queries
                 m = mask.view(-1, 1, 1, l_kv).expand_as(mixed_scores)
-            
-            # Prevent all-masked rows causing nan in softmax
-            all_masked = m.all(dim = -1, keepdim = True)
-            if all_masked.any():
-                m = m.clone()
-                m.masked_fill_(all_masked, False)
-                
             mixed_scores[m] = -float('inf')
 
         # Compute attention weights

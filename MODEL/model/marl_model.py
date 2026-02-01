@@ -14,9 +14,7 @@ import torch.nn.functional as F
 class EdgeEnhencedLearner(nn.Module):
     def __init__(self, cust_feat_size, veh_state_size, model_size = 128,
             layer_count = 3, head_count = 8, ff_size = 512, tanh_xplor = 10, greedy = False,
-            edge_feat_size = 8, cust_k = 10, memory_size = None, lookahead_hidden = 128,
-            dropout = 0.1
-            ):
+            edge_feat_size = 8, cust_k = 15, memory_size = None, lookahead_hidden = 128 , dropout = 0.1):
         r"""
         :param model_size:  Dimension :math:`D` shared by all intermediate layers
         :param layer_count: Number of layers in customers' (graph) Transformer Encoder
@@ -27,29 +25,26 @@ class EdgeEnhencedLearner(nn.Module):
         super().__init__()
 
         self.model_size = model_size
+        self.inv_sqrt_d = model_size ** -0.5
 
         self.tanh_xplor = tanh_xplor
 
         self.depot_embedding = nn.Linear(cust_feat_size, model_size)
         self.cust_embedding  = nn.Linear(cust_feat_size, model_size)
-        self.cust_encoder    = GraphEncoder(layer_count, head_count, model_size, ff_size, k = cust_k, dropout = dropout)
+        self.cust_encoder    = GraphEncoder(layer_count, head_count, model_size, ff_size, k = cust_k)
 
-        self.fleet_encoder   = FleetEncoder(layer_count, head_count, model_size, ff_size, dropout = dropout)
-        self.edge_encoder    = EdgeFeatureEncoder(edge_feat_size, model_size, dropout = dropout)
+        self.fleet_encoder   = FleetEncoder(layer_count, head_count, model_size, ff_size)
+        self.edge_encoder    = EdgeFeatureEncoder(edge_feat_size, model_size)
         self.cross_fusion    = CrossEdgeFusion(head_count, model_size)
 
-        self.coord_memory    = CoordinationMemory(veh_state_size, model_size if memory_size is None else memory_size, dropout = dropout)
-        self.owner_head      = OwnershipHead(model_size, dropout = dropout)
-        self.lookahead_head  = LookaheadHead(model_size, hidden_size = lookahead_hidden, dropout = dropout)
+        self.coord_memory    = CoordinationMemory(veh_state_size, model_size if memory_size is None else memory_size)
+        self.owner_head      = OwnershipHead(model_size)
+        self.lookahead_head  = LookaheadHead(model_size, hidden_size = lookahead_hidden)
 
         self.cust_project    = nn.Linear(model_size, model_size)
         self.veh_project     = nn.Linear(model_size, model_size)
-        self.fusion_norm     = nn.LayerNorm(3)
-        self.score_fusion    = nn.Sequential(
-            nn.Linear(3, 16),
-            nn.ReLU(),
-            nn.Linear(16, 1)
-        )
+        self.logit_weights   = nn.Parameter(torch.tensor([1.0, 1.0, 1.0]))
+
         self.dropout         = nn.Dropout(dropout)
         self.greedy = greedy
 
@@ -65,17 +60,16 @@ class EdgeEnhencedLearner(nn.Module):
             self.cust_embedding(customers[:,1:,:])
             ), dim = 1) #.size() = N x L_c x D
         if mask is not None:
-            cust_emb = cust_emb.masked_fill(mask.unsqueeze(-1), 0.0)
-        cust_emb = self.dropout(cust_emb)
+            cust_emb[mask] = 0
         self.cust_enc = self.cust_encoder(cust_emb, mask, coords = customers[:, :, :2]) #.size() = N x L_c x D
         self.cust_repr = self.dropout(self.cust_project(self.cust_enc)) #.size() = N x L_c x D
         if mask is not None:
-            self.cust_repr = self.cust_repr.masked_fill(mask.unsqueeze(-1), 0.0)
+            self.cust_repr[mask] = 0
 
 
     def _encode_fleet(self, vehicles, cust_repr, mask = None):
         fleet_enc = self.fleet_encoder(vehicles, cust_repr, mask = mask)
-        return self.dropout(self.veh_project(fleet_enc))
+        return self.veh_project(fleet_enc)
 
 
     def _build_fleet_edges(self, vehicles):
@@ -153,19 +147,9 @@ class EdgeEnhencedLearner(nn.Module):
 
         :return:         :math:`N \times 1 \times L_c` tensor containing minibatch of compatibility scores between currently acting vehicle and each customer
         """
-        att_score = self.dropout(self.cross_fusion(veh_repr, cust_repr, edge_emb))
-        
-        # Non-linear fusion of scores
-        scores = torch.cat((
-            att_score.unsqueeze(-1),
-            owner_bias.unsqueeze(-1),
-            lookahead.unsqueeze(-1)
-        ), dim = -1) # N x 1 x L_c x 3
-        
-        # Use LayerNorm to stabilize scores before MLP
-        scores = self.fusion_norm(scores)
-        compat = self.score_fusion(scores).squeeze(-1) # N x 1 x L_c
-        
+        att_score = self.cross_fusion(veh_repr, cust_repr, edge_emb)
+        weights = torch.softmax(self.logit_weights, dim = 0)
+        compat = weights[0] * att_score + weights[1] * owner_bias - weights[2] * lookahead
         if self.tanh_xplor is not None:
             compat = self.tanh_xplor * compat.tanh()
         return compat
@@ -179,17 +163,7 @@ class EdgeEnhencedLearner(nn.Module):
 
         :return:         :math:`N \times L_c` tensor containing minibatch of log-probabilities for choosing which customer to serve next
         """
-        if veh_mask is not None:
-            # Handle all-masked rows to prevent nan in log_softmax
-            all_masked = veh_mask.all(dim = 2, keepdim = True)
-            if all_masked.any():
-                # If all nodes are masked, temporarily unmask depot (index 0) 
-                # to prevent nan, although environment should ideally prevent this.
-                veh_mask = veh_mask.clone()
-                veh_mask[:, :, 0] = veh_mask[:, :, 0] & (~all_masked.squeeze(-1))
-            
-            compat = compat.masked_fill(veh_mask, float('-inf'))
-            
+        compat[veh_mask] = -float('inf')
         return compat.log_softmax(dim = 2).squeeze(1)
 
 
@@ -203,8 +177,7 @@ class EdgeEnhencedLearner(nn.Module):
         owner_logits = self.owner_head(self._veh_memory, self.cust_repr)
         owner_prob = owner_logits.softmax(dim = 1)
         owner_bias = owner_prob.gather(1, dyna.cur_veh_idx[:, :, None].expand(-1, -1, owner_prob.size(-1)))
-        # Use a safer epsilon for log to prevent gradient explosion in float16/AMP
-        owner_bias = torch.log(owner_bias + 1e-5)
+        owner_bias = owner_bias.clamp_min(1e-9).log()
 
         lookahead = self.lookahead_head(veh_repr, self.cust_repr, edge_emb)
         compat : torch.Tensor = self._score_customers(veh_repr, self.cust_repr, edge_emb, owner_bias, lookahead)
