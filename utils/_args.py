@@ -37,15 +37,17 @@ HEAD_COUNT = 8
 FF_SIZE = 512
 TANH_XPLOR = 10
 EDGE_FEAT_SIZE = 8
-FLEET_K = 6
+CUST_K = 15
 MEMORY_SIZE = None
 LOOKAHEAD_HIDDEN = 128
+MODEL_DROPOUT = 0.1
 
 EPOCH_COUNT = 20
 ITER_COUNT = 1000
 MINIBATCH_SIZE = 512
 BASE_LR = 0.0001
 LR_DECAY = None
+WEIGHT_DECAY = 1e-5
 MAX_GRAD_NORM = 2
 GRAD_NORM_DECAY = None
 LOSS_USE_CUMUL = False
@@ -115,9 +117,10 @@ def parse_args(argv = None):
     group.add_argument("--ff-size", type = int, default = FF_SIZE)
     group.add_argument("--tanh-xplor", type = float, default = TANH_XPLOR)
     group.add_argument("--edge-feat-size", type = int, default = EDGE_FEAT_SIZE)
-    group.add_argument("--fleet-k", type = int, default = FLEET_K)
+    group.add_argument("--cust-k", type = int, default = CUST_K)
     group.add_argument("--memory-size", type = int, default = MEMORY_SIZE)
     group.add_argument("--lookahead-hidden", type = int, default = LOOKAHEAD_HIDDEN)
+    group.add_argument("--dropout", type = float, default = MODEL_DROPOUT)
 
     group = parser.add_argument_group("Training parameters")
     group.add_argument("--epoch-count", "-e", type = int, default = EPOCH_COUNT)
@@ -125,6 +128,7 @@ def parse_args(argv = None):
     group.add_argument("--batch-size", "-b", type = int, default = MINIBATCH_SIZE)
     group.add_argument("--learning-rate", "-r", type = float, default = BASE_LR)
     group.add_argument("--rate-decay", "-d", type = float, default = LR_DECAY)
+    group.add_argument("--weight-decay", type = float, default = WEIGHT_DECAY)
     group.add_argument("--max-grad-norm", type = float, default = MAX_GRAD_NORM)
     group.add_argument("--grad-norm-decay", type = float, default = GRAD_NORM_DECAY)
     group.add_argument("--loss-use-cumul", action = "store_true", default = LOSS_USE_CUMUL)

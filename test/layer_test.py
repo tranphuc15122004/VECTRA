@@ -48,21 +48,21 @@ def test_graph_encoder_cost_mat_override():
 	_assert_finite(out, "GraphEncoder output (cost_mat)")
 
 
-def test_fleet_encoder_shapes_and_knn_mask():
+
+def test_fleet_encoder_shapes_and_cross_attention():
 	torch.manual_seed(0)
-	batch, veh_count, veh_state = 2, 4, 6
+	batch, veh_count, cust_count, veh_state = 2, 4, 6, 6
 	model_size = 32
 	head_count = 8
 	ff_size = 64
 
 	vehicles = torch.randn(batch, veh_count, veh_state)
-	dist = torch.cdist(vehicles[:, :, :2], vehicles[:, :, :2])
-	time_gap = torch.abs(vehicles[:, :, 3:4] - vehicles[:, :, 3:4].transpose(1, 2))
-	capa_gap = torch.abs(vehicles[:, :, 2:3] - vehicles[:, :, 2:3].transpose(1, 2))
-	fleet_edges = torch.stack((dist, time_gap.squeeze(-1), capa_gap.squeeze(-1)), dim=-1)
+	cust_repr = torch.randn(batch, cust_count, model_size)
+	mask = torch.zeros(batch, veh_count, cust_count, dtype=torch.bool)
+	mask[:, :, -1] = True
 
-	enc = FleetEncoder(layer_count=2, head_count=head_count, model_size=model_size, ff_size=ff_size, k=3)
-	out = enc(vehicles, fleet_edges)
+	enc = FleetEncoder(layer_count=2, head_count=head_count, model_size=model_size, ff_size=ff_size)
+	out = enc(vehicles, cust_repr, mask=mask)
 	assert out.shape == (batch, veh_count, model_size)
 	_assert_finite(out, "FleetEncoder output")
 
@@ -175,7 +175,7 @@ def main():
 	tests = [
 		test_graph_encoder_shapes_and_masking,
 		test_graph_encoder_cost_mat_override,
-		test_fleet_encoder_shapes_and_knn_mask,
+		test_fleet_encoder_shapes_and_cross_attention,
 		test_edge_feature_and_fusion_shapes,
 		test_edge_feature_encoder_gradients,
 		test_coordination_memory_update,

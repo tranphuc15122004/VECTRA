@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ._mha import MixedScore_MultiHeadAttention
+from ._mha import MixedScore_MultiHeadAttention, _MHA_V2
 
 
 class GraphEncoderLayer(nn.Module):
@@ -12,6 +12,7 @@ class GraphEncoderLayer(nn.Module):
 		self.model_size = model_size
 		self.rbf_bins = rbf_bins
 		self.dropout = nn.Dropout(dropout)
+		self.ff_dropout = nn.Dropout(dropout)
 		if model_size % head_count != 0:
 			raise ValueError("model_size must be divisible by head_count")
 
@@ -54,7 +55,20 @@ class GraphEncoderLayer(nn.Module):
 		scores = scores + edge_bias
 
 		if mask is not None:
-			key_mask = mask.unsqueeze(1).unsqueeze(2).expand(-1, self.head_count, length, -1)
+			if mask.dim() == 2:
+				key_mask = mask.unsqueeze(1).unsqueeze(2).expand(-1, self.head_count, length, -1)
+			elif mask.dim() == 3:
+				key_mask = mask.unsqueeze(1).expand(-1, self.head_count, -1, -1)
+			else:
+				raise ValueError("mask must be 2D or 3D")
+			
+			# Check if any row in any head is fully masked
+			all_masked = key_mask.all(dim = -1, keepdim = True)
+			if all_masked.any():
+				# If all entries are masked, unmask the first one to avoid nan in softmax
+				key_mask = key_mask.clone()
+				key_mask.masked_fill_(all_masked, False)
+				
 			scores = scores.masked_fill(key_mask, float('-inf'))
 
 		attn = F.softmax(scores, dim = -1)
@@ -63,23 +77,24 @@ class GraphEncoderLayer(nn.Module):
 		att = self.out_proj(context)
 
 		h = self.norm1(h_in + att)
-		ff = self.ff2(F.relu(self.ff1(h)))
+		ff = self.ff2(self.ff_dropout(F.relu(self.ff1(h))))
 		h_out = self.norm2(h + ff)
 		if mask is not None:
 			if mask.dim() == 2:
-				h_out[mask] = 0
+				h_out = h_out.masked_fill(mask.unsqueeze(-1), 0.0)
 			elif mask.dim() == 3:
 				node_mask = mask.all(dim = -1)
 				if node_mask.any():
-					h_out[node_mask] = 0
+					h_out = h_out.masked_fill(node_mask.unsqueeze(-1), 0.0)
 		return h_out
 
 
 class GraphEncoder(nn.Module):
-	def __init__(self, layer_count, head_count, model_size, ff_size):
+	def __init__(self, layer_count, head_count, model_size, ff_size, k = None, dropout = 0.1):
 		super().__init__()
+		self.k = k
 		self.layers = nn.ModuleList([
-			GraphEncoderLayer(head_count, model_size, ff_size) for _ in range(layer_count)
+			GraphEncoderLayer(head_count, model_size, ff_size, dropout = dropout) for _ in range(layer_count)
 		])
 
 	def forward(self, inputs, mask = None, cost_mat = None, coords = None):
@@ -95,76 +110,80 @@ class GraphEncoder(nn.Module):
 			cost_mat = torch.cdist(pos, pos)
 		max_val = cost_mat.amax(dim = (-1, -2), keepdim = True).clamp(min = 1e-6)
 		cost_mat = cost_mat / max_val
+		attn_mask = None
+		if self.k is not None and self.k > 0:
+			k = min(self.k, cost_mat.size(-1))
+			_, knn_idx = torch.topk(cost_mat, k, largest = False)
+			attn_mask = cost_mat.new_ones(cost_mat.size(), dtype = torch.bool)
+			attn_mask.scatter_(2, knn_idx, False)
+		if mask is not None:
+			key_mask = mask[:, None, :].expand(-1, cost_mat.size(1), -1)
+			attn_mask = key_mask if attn_mask is None else (attn_mask | key_mask)
+			query_mask = mask[:, :, None].expand(-1, -1, cost_mat.size(2))
+			attn_mask = query_mask if attn_mask is None else (attn_mask | query_mask)
 		h = inputs
 		for layer in self.layers:
-			h = layer(h, cost_mat, mask)
+			h = layer(h, cost_mat, attn_mask if attn_mask is not None else mask)
 		return h
 
 
 class FleetEncoderLayer(nn.Module):
-	def __init__(self, head_count, model_size, ff_size):
+	def __init__(self, head_count, model_size, ff_size, dropout = 0.1):
 		super().__init__()
-		self.mha = MixedScore_MultiHeadAttention(head_count, model_size, ms_hidden_dim = 16)
+		self.mha = _MHA_V2(head_count, model_size)
 		self.norm1 = nn.LayerNorm(model_size)
 		self.ff1 = nn.Linear(model_size, ff_size)
 		self.ff2 = nn.Linear(ff_size, model_size)
 		self.norm2 = nn.LayerNorm(model_size)
+		self.attn_dropout = nn.Dropout(dropout)
+		self.ff_dropout = nn.Dropout(dropout)
 
-	def forward(self, h_in, cost_mat, mask = None):
-		att = self.mha(h_in, mask = mask, cost_mat = cost_mat)
-		h = self.norm1(h_in + att)
-		ff = self.ff2(F.relu(self.ff1(h)))
+	def forward(self, veh_repr, cust_repr, mask = None):
+		att = self.mha(veh_repr, keys = cust_repr, values = cust_repr, mask = mask)
+		att = self.attn_dropout(att)
+		h = self.norm1(veh_repr + att)
+		ff = self.ff2(self.ff_dropout(F.relu(self.ff1(h))))
 		h_out = self.norm2(h + ff)
 		if mask is not None:
-			if mask.dim() == 2:
-				h_out[mask] = 0
+			if mask.dim() == 2 and mask.size(1) == h_out.size(1):
+				h_out = h_out.masked_fill(mask.unsqueeze(-1), 0.0)
 			elif mask.dim() == 3:
 				node_mask = mask.all(dim = -1)
 				if node_mask.any():
-					h_out[node_mask] = 0
+					h_out = h_out.masked_fill(node_mask.unsqueeze(-1), 0.0)
 		return h_out
 
 
 class FleetEncoder(nn.Module):
-	def __init__(self, layer_count, head_count, model_size, ff_size, k = 6):
+	def __init__(self, layer_count, head_count, model_size, ff_size, dropout = 0.1):
 		super().__init__()
-		self.k = k
 		self.input_proj = nn.LazyLinear(model_size)
 		self.layers = nn.ModuleList([
-			FleetEncoderLayer(head_count, model_size, ff_size) for _ in range(layer_count)
+			FleetEncoderLayer(head_count, model_size, ff_size, dropout = dropout) for _ in range(layer_count)
 		])
 
-	def forward(self, vehicles, fleet_edges):
+	def forward(self, vehicles, cust_repr, mask = None):
 		"""
 		:param vehicles:    N x L_v x D_v
-		:param fleet_edges: N x L_v x L_v x E_f
+		:param cust_repr:   N x L_c x D
+		:param mask:        N x L_v x L_c or N x L_c (optional)
 		:return:            N x L_v x D
 		"""
 		h = self.input_proj(vehicles)
-
-		dist = fleet_edges[..., 0]
-		cost_mat = dist
-
-		mask = None
-		if self.k is not None and self.k > 0:
-			k = min(self.k, dist.size(-1))
-			_, knn_idx = torch.topk(dist, k, largest = False)
-			mask = dist.new_ones(dist.size(), dtype = torch.bool)
-			mask.scatter_(2, knn_idx, False)
-
 		for layer in self.layers:
-			h = layer(h, cost_mat, mask)
+			h = layer(h, cust_repr, mask)
 		return h
 
 
 class EdgeFeatureEncoder(nn.Module):
-	def __init__(self, edge_feat_size, model_size):
+	def __init__(self, edge_feat_size, model_size, dropout = 0.1):
 		super().__init__()
 		self.edge_feat_size = edge_feat_size
 		self.model_size = model_size
 		self.net = nn.Sequential(
 			nn.Linear(edge_feat_size, model_size),
 			nn.ReLU(),
+			nn.Dropout(dropout),
 			nn.Linear(model_size, model_size),
 			nn.LayerNorm(model_size)
 		)
@@ -211,12 +230,14 @@ class CrossEdgeFusion(nn.Module):
 
 
 class CoordinationMemory(nn.Module):
-	def __init__(self, veh_state_size, hidden_size):
+	def __init__(self, veh_state_size, hidden_size, dropout = 0.1):
 		super().__init__()
 		self.veh_state_size = veh_state_size
 		self.hidden_size = hidden_size
 		self.input_proj = nn.LazyLinear(hidden_size)
 		self.hidden_proj = nn.Linear(hidden_size, hidden_size)
+		self.norm = nn.LayerNorm(hidden_size)
+		self.dropout = nn.Dropout(dropout)
 
 	def update(self, memory, veh_idx, veh_repr, cust_repr, edge_emb):
 		"""
@@ -233,17 +254,20 @@ class CoordinationMemory(nn.Module):
 			cust_repr.squeeze(1),
 			edge_emb.squeeze(2).squeeze(1)
 		), dim = -1)
-		next_h = torch.tanh(self.input_proj(x) + self.hidden_proj(cur_h.squeeze(1)))
+		next_h = self.input_proj(x) + self.hidden_proj(cur_h.squeeze(1))
+		next_h = torch.tanh(self.norm(self.dropout(next_h)))
+		next_h = next_h.to(memory.dtype)
 		updated = memory.scatter(1, veh_idx[:, :, None].expand(-1, -1, memory.size(-1)), next_h.unsqueeze(1))
 		return updated
 
 
 class OwnershipHead(nn.Module):
-	def __init__(self, model_size):
+	def __init__(self, model_size, dropout = 0.1):
 		super().__init__()
 		self.model_size = model_size
 		self.veh_proj = nn.LazyLinear(model_size)
 		self.cust_proj = nn.Linear(model_size, model_size, bias = False)
+		self.dropout = nn.Dropout(dropout)
 
 	def forward(self, veh_memory, cust_repr):
 		"""
@@ -251,21 +275,22 @@ class OwnershipHead(nn.Module):
 		:param cust_repr:  N x L_c x D
 		:return:           N x L_v x L_c
 		"""
-		v = self.veh_proj(veh_memory)
-		c = self.cust_proj(cust_repr)
+		v = self.dropout(self.veh_proj(veh_memory))
+		c = self.dropout(self.cust_proj(cust_repr))
 		logits = torch.matmul(v, c.transpose(1, 2))
 		logits *= (self.model_size ** -0.5)
 		return logits
 
 
 class LookaheadHead(nn.Module):
-	def __init__(self, model_size, hidden_size = 128):
+	def __init__(self, model_size, hidden_size = 128, dropout = 0.1):
 		super().__init__()
 		self.model_size = model_size
 		self.hidden_size = hidden_size
 		self.net = nn.Sequential(
 			nn.LazyLinear(hidden_size),
 			nn.ReLU(),
+			nn.Dropout(dropout),
 			nn.Linear(hidden_size, 1)
 		)
 
