@@ -43,7 +43,14 @@ class EdgeEnhencedLearner(nn.Module):
 
         self.cust_project    = nn.Linear(model_size, model_size)
         self.veh_project     = nn.Linear(model_size, model_size)
-        self.logit_weights   = nn.Parameter(torch.tensor([1.0, 1.0, 1.0]))
+
+        # Advanced score fusion MLP to capture complex interactions between 
+        # attention, vehicle-customer ownership/coordination, and lookahead scores.
+        self.score_fusion = nn.Sequential(
+            nn.Linear(3, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1)
+        )
 
         self.dropout         = nn.Dropout(dropout)
         self.greedy = greedy
@@ -148,8 +155,23 @@ class EdgeEnhencedLearner(nn.Module):
         :return:         :math:`N \times 1 \times L_c` tensor containing minibatch of compatibility scores between currently acting vehicle and each customer
         """
         att_score = self.cross_fusion(veh_repr, cust_repr, edge_emb)
-        weights = torch.softmax(self.logit_weights, dim = 0)
-        compat = weights[0] * att_score + weights[1] * owner_bias - weights[2] * lookahead
+        
+        # Normalize each score source to a common scale (mean=0, std=1) across candidates
+        # so they contribute "fairly" to the final decision.
+        def z_norm(s):
+            return (s - s.mean(dim = -1, keepdim = True)) / (s.std(dim = -1, keepdim = True) + 1e-8)
+
+        # Concatenate normalized score sources
+        # Shape: (N, 1, L_c, 3)
+        combined_scores = torch.stack([
+            z_norm(att_score),
+            z_norm(owner_bias),
+            z_norm(lookahead)
+        ], dim = -1)
+        
+        # Non-linear fusion using the score_fusion MLP
+        compat = self.score_fusion(combined_scores).squeeze(-1)
+
         if self.tanh_xplor is not None:
             compat = self.tanh_xplor * compat.tanh()
         return compat
