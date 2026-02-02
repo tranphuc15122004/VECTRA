@@ -1082,16 +1082,16 @@ def step(dyna):
 ### Model Architecture
 ```python
 EdgeEnhencedLearner(
-    cust_feat_size=5,       # (x, y, demand, tw_start, tw_end)
+    cust_feat_size=7,       # (x, y, demand, tw_start, tw_end, ...)
     veh_state_size=4,       # (x, y, capacity, time)
     model_size=128,         # D: embedding dimension
-    layer_count=3,          # Number of Transformer layers
-    head_count=8,           # Number of attention heads
-    ff_size=512,            # Feed-forward hidden size
+    layer_count=2,          # Number of Transformer layers
+    head_count=4,           # Number of attention heads
+    ff_size=258,            # Feed-forward hidden size
     tanh_xplor=10,          # Exploration amplitude
     greedy=False,           # Sampling (False) or greedy (True)
     edge_feat_size=8,       # Edge feature dimension
-    cust_k=15,              # k-NN for graph encoder
+    cust_k=20,              # k-NN for graph encoder
     memory_size=None,       # Memory size (default = model_size)
     lookahead_hidden=128,   # Lookahead MLP hidden size
     dropout=0.1             # Dropout rate
@@ -1102,72 +1102,8 @@ EdgeEnhencedLearner(
 ```python
 optimizer = Adam(lr=1e-4)
 batch_size = 512
-epochs = 100
-baseline = "rollout"  # or "critic", "no_bl"
-```
-
-### Problem Settings
-```python
-# Example: DVRPTW n=100, m=5
-n_customers = 100
-n_vehicles = 5
-time_window_width = 100
-vehicle_capacity = 50
-grid_size = [0, 1] × [0, 1]
-```
-
----
-
-## Training & Inference
-
-### Training (Reinforcement Learning)
-
-Model được train bằng **REINFORCE with baseline**:
-
-```python
-# Forward pass
-actions, logps, rewards = model(dyna)
-
-# Compute returns
-returns = []
-R = 0
-for r in reversed(rewards):
-    R = r + gamma * R
-    returns.insert(0, R)
-returns = torch.tensor(returns)
-
-# Compute baseline (critic hoặc rollout)
-if baseline == "critic":
-    baselines = critic(states)
-elif baseline == "rollout":
-    baselines = rollout_baseline(dyna)
-else:
-    baselines = returns.mean()
-
-# Policy gradient loss
-advantages = returns - baselines
-logps_tensor = torch.cat(logps)
-loss = -(logps_tensor * advantages.detach()).mean()
-
-# Backprop
-optimizer.zero_grad()
-loss.backward()
-optimizer.step()
-```
-
-### Inference (Greedy Decoding)
-
-```python
-model.eval()
-model.greedy = True
-
-with torch.no_grad():
-    actions, logps, rewards = model(dyna)
-
-# Construct solution
-routes = []
-for veh_idx, cust_idx in actions:
-    routes[veh_idx].append(cust_idx)
+epochs = 500
+baseline = "critic"  
 ```
 
 ---
