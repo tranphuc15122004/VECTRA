@@ -10,6 +10,30 @@ from layers import (
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from collections import defaultdict
+import time
+
+
+class ForwardProfiler:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.timings = defaultdict(float)
+
+    def add(self, section, duration):
+        self.timings[section] += duration
+
+    def get_summary(self):
+        total = sum(self.timings.values())
+        if total == 0:
+            return [], 0.0
+        ordered = sorted(self.timings.items(), key=lambda item: -item[1])
+        summary = [
+            (name, duration, duration / total * 100.0)
+            for name, duration in ordered
+        ]
+        return summary, total
 
 class EdgeEnhencedLearner(nn.Module):
     def __init__(self, cust_feat_size, veh_state_size, model_size = 128,
@@ -54,6 +78,7 @@ class EdgeEnhencedLearner(nn.Module):
 
         self.dropout         = nn.Dropout(dropout)
         self.greedy = greedy
+        self._forward_profiler = ForwardProfiler()
 
 
     def _encode_customers(self, customers, mask = None):
@@ -62,6 +87,7 @@ class EdgeEnhencedLearner(nn.Module):
         :param mask:      :math:`N \times L_c` tensor containing minibatch of masks
                 where :math:`m_{nj} = 1` if customer :math:`j` in sample :math:`n` is hidden (pad or dyn), 0 otherwise
         """
+        start = time.perf_counter()
         cust_emb = torch.cat((
             self.depot_embedding(customers[:,0:1,:]),
             self.cust_embedding(customers[:,1:,:])
@@ -72,6 +98,7 @@ class EdgeEnhencedLearner(nn.Module):
         self.cust_repr = self.dropout(self.cust_project(self.cust_enc)) #.size() = N x L_c x D
         if mask is not None:
             self.cust_repr[mask] = 0
+        self._forward_profiler.add("encode_customers", time.perf_counter() - start)
 
 
     def _encode_fleet(self, vehicles, cust_repr, mask = None):
@@ -80,16 +107,20 @@ class EdgeEnhencedLearner(nn.Module):
 
 
     def _build_fleet_edges(self, vehicles):
+        start = time.perf_counter()
         pos = vehicles[:, :, :2]
-        time = vehicles[:, :, 3:4]
+        time_feat = vehicles[:, :, 3:4]
         capa = vehicles[:, :, 2:3]
         dist = torch.cdist(pos, pos)
-        time_gap = (time - time.transpose(1, 2)).abs()
+        time_gap = (time_feat - time_feat.transpose(1, 2)).abs()
         capa_gap = (capa - capa.transpose(1, 2)).abs()
-        return torch.stack((dist, time_gap.squeeze(-1), capa_gap.squeeze(-1)), dim = -1)
+        edge = torch.stack((dist, time_gap.squeeze(-1), capa_gap.squeeze(-1)), dim = -1)
+        self._forward_profiler.add("build_fleet_edges", time.perf_counter() - start)
+        return edge
 
 
     def _build_edge_features(self, vehicles, customers, veh_idx, veh_mask = None):
+        start = time.perf_counter()
         v = vehicles.gather(1, veh_idx[:, :, None].expand(-1, -1, vehicles.size(-1)))
         v_pos = v[:, :, :2]
         v_time = v[:, :, 3:4]
@@ -131,6 +162,7 @@ class EdgeEnhencedLearner(nn.Module):
             feasible,
             cap_gap.unsqueeze(-1),
         ), dim = -1)
+        self._forward_profiler.add("build_edge_features", time.perf_counter() - start)
         return feats
 
 
@@ -143,8 +175,10 @@ class EdgeEnhencedLearner(nn.Module):
 
         :return:         :math:`N \times 1 \times D` tensor containing minibatch of representations for currently acting vehicle
         """
+        start = time.perf_counter()
         fleet_repr = self._encode_fleet(vehicles, self.cust_repr, mask = mask) #.size() = N x L_v x D
         veh_query = fleet_repr.gather(1, veh_idx.unsqueeze(2).expand(-1, -1, self.model_size)) #.size() = N x 1 x D
+        self._forward_profiler.add("represent_vehicle", time.perf_counter() - start)
         return veh_query
 
 
@@ -154,6 +188,7 @@ class EdgeEnhencedLearner(nn.Module):
 
         :return:         :math:`N \times 1 \times L_c` tensor containing minibatch of compatibility scores between currently acting vehicle and each customer
         """
+        start = time.perf_counter()
         att_score = self.cross_fusion(veh_repr, cust_repr, edge_emb)
         
         # Normalize each score source to a common scale (mean=0, std=1) across candidates
@@ -174,6 +209,7 @@ class EdgeEnhencedLearner(nn.Module):
 
         if self.tanh_xplor is not None:
             compat = self.tanh_xplor * compat.tanh()
+        self._forward_profiler.add("score_customers", time.perf_counter() - start)
         return compat
 
 
@@ -185,8 +221,11 @@ class EdgeEnhencedLearner(nn.Module):
 
         :return:         :math:`N \times L_c` tensor containing minibatch of log-probabilities for choosing which customer to serve next
         """
+        start = time.perf_counter()
         compat[veh_mask] = -float('inf')
-        return compat.log_softmax(dim = 2).squeeze(1)
+        logprobs = compat.log_softmax(dim = 2).squeeze(1)
+        self._forward_profiler.add("logp", time.perf_counter() - start)
+        return logprobs
 
 
     def step(self, dyna):
@@ -196,12 +235,16 @@ class EdgeEnhencedLearner(nn.Module):
         edge_feat = self._build_edge_features(dyna.vehicles, dyna.nodes, dyna.cur_veh_idx, dyna.cur_veh_mask)
         edge_emb = self.edge_encoder(edge_feat)
 
+        owner_start = time.perf_counter()
         owner_logits = self.owner_head(self._veh_memory, self.cust_repr)
         owner_prob = owner_logits.softmax(dim = 1)
         owner_bias = owner_prob.gather(1, dyna.cur_veh_idx[:, :, None].expand(-1, -1, owner_prob.size(-1)))
         owner_bias = owner_bias.clamp_min(1e-9).log()
+        self._forward_profiler.add("ownership_head", time.perf_counter() - owner_start)
 
+        lookahead_start = time.perf_counter()
         lookahead = self.lookahead_head(veh_repr, self.cust_repr, edge_emb)
+        self._forward_profiler.add("lookahead_head", time.perf_counter() - lookahead_start)
         compat : torch.Tensor = self._score_customers(veh_repr, self.cust_repr, edge_emb, owner_bias, lookahead)
         logp = self._get_logp(compat, dyna.cur_veh_mask)
         if self.greedy:
@@ -213,12 +256,15 @@ class EdgeEnhencedLearner(nn.Module):
 
 
     def _update_memory(self, veh_idx, cust_idx, veh_repr, edge_emb):
+        start = time.perf_counter()
         edge_sel = edge_emb.gather(2, cust_idx[:, :, None, None].expand(-1, -1, -1, edge_emb.size(-1)))
         cust_sel = self.cust_repr.gather(1, cust_idx[:, :, None].expand(-1, -1, self.cust_repr.size(-1)))
         self._veh_memory = self.coord_memory.update(self._veh_memory, veh_idx, veh_repr, cust_sel, edge_sel)
+        self._forward_profiler.add("memory_update", time.perf_counter() - start)
 
 
     def forward(self, dyna):
+        self._forward_profiler.reset()
         dyna.reset()
         actions, logps, rewards = [], [], []
         if hasattr(dyna, "veh_speed"):
@@ -236,3 +282,9 @@ class EdgeEnhencedLearner(nn.Module):
 
     def _reset_memory(self, dyna):
         self._veh_memory = dyna.vehicles.new_zeros((dyna.vehicles.size(0), dyna.vehicles.size(1), self.coord_memory.hidden_size))
+
+    def reset_forward_profiling(self):
+        self._forward_profiler.reset()
+
+    def get_forward_profiling_summary(self):
+        return self._forward_profiler.get_summary()
