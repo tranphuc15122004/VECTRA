@@ -26,6 +26,11 @@ class CriticBaseline(Baseline):
         return val.squeeze(1)
 
     def __call__(self, vrp_dynamics):
+        # Reset learnable-MoE auxiliary loss before each episode rollout.
+        # CriticBaseline bypasses learner.forward(), so the reset inside forward()
+        # is never triggered — we must do it here explicitly.
+        if getattr(self.learner, 'sbg_moe_enable', False):
+            self.learner._moe_aux_loss = None
         vrp_dynamics.reset()
         cust_mask = getattr(vrp_dynamics, "cust_mask", None)
         self.learner._encode_customers(vrp_dynamics.nodes, cust_mask)
@@ -61,7 +66,8 @@ class CriticBaseline(Baseline):
                     self.learner.cust_repr,
                     edge_emb,
                     owner_bias,
-                    lookahead)
+                    lookahead,
+                    vrp_dynamics.cur_veh_mask)   # pass mask for correct MoE router context
             else:
                 compat = self.learner._score_customers(veh_repr)
             logp = self.learner._get_logp(compat, vrp_dynamics.cur_veh_mask)

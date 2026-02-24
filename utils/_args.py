@@ -41,6 +41,28 @@ CUST_K = 15
 MEMORY_SIZE = None
 LOOKAHEAD_HIDDEN = 128
 MODEL_DROPOUT = 0.1
+SBG_ENABLE = False
+SBG_CAND_K = 0
+SBG_ADAPTIVE_K = False
+SBG_K_MIN = 8
+SBG_K_MAX = None
+SBG_LATE_PENALTY = 2.0
+SBG_SLACK_WEIGHT = 0.5
+SBG_OWNER_WEIGHT = 0.5
+SBG_MOE_ENABLE = False
+SBG_MOE_STRENGTH = 0.03
+SBG_MOE_UNCERTAINTY = True
+SBG_MOE_MIN_STRENGTH = 0.01
+SBG_MOE_ENTROPY_FLOOR = 0.35
+SBG_MOE_MARGIN_CEIL = 1.5
+SBG_MOE_LOAD_BALANCE_COEF = 0.01
+ADAPTIVE_DEPTH = False
+ADAPTIVE_MIN_LAYERS = 1
+ADAPTIVE_EASY_RATIO = 0.6
+LATENT_BOTTLENECK = False
+LATENT_TOKENS = 32
+LATENT_MIN_NODES = 64
+SBG_TRAIN_READY = False
 
 EPOCH_COUNT = 20
 ITER_COUNT = 1000
@@ -63,6 +85,15 @@ CRITIC_LR = 0.001
 CRITIC_DECAY = None
 
 TEST_BATCH_SIZE = 128
+
+PPO_EPOCHS = 4
+PPO_CLIP_RANGE = 0.2
+PPO_VALUE_COEF = 0.5
+PPO_ENTROPY_COEF = 0.01
+PPO_GAMMA = 1.0
+PPO_GAE_LAMBDA = 1.0
+PPO_ADV_NORM = True
+PPO_TARGET_KL = None
 
 OUTPUT_DIR = None
 RESUME_STATE = None
@@ -121,6 +152,29 @@ def parse_args(argv = None):
     group.add_argument("--memory-size", type = int, default = MEMORY_SIZE)
     group.add_argument("--lookahead-hidden", type = int, default = LOOKAHEAD_HIDDEN)
     group.add_argument("--dropout", type = float, default = MODEL_DROPOUT)
+    group.add_argument("--sbg-enable", action = "store_true", default = SBG_ENABLE)
+    group.add_argument("--sbg-cand-k", type = int, default = SBG_CAND_K)
+    group.add_argument("--sbg-adaptive-k", action = "store_true", default = SBG_ADAPTIVE_K)
+    group.add_argument("--sbg-k-min", type = int, default = SBG_K_MIN)
+    group.add_argument("--sbg-k-max", type = int, default = SBG_K_MAX)
+    group.add_argument("--sbg-late-penalty", type = float, default = SBG_LATE_PENALTY)
+    group.add_argument("--sbg-slack-weight", type = float, default = SBG_SLACK_WEIGHT)
+    group.add_argument("--sbg-owner-weight", type = float, default = SBG_OWNER_WEIGHT)
+    group.add_argument("--sbg-moe-enable", action = "store_true", default = SBG_MOE_ENABLE)
+    group.add_argument("--sbg-moe-strength", type = float, default = SBG_MOE_STRENGTH)
+    group.add_argument("--sbg-moe-uncertainty", action = "store_true", default = SBG_MOE_UNCERTAINTY)
+    group.add_argument("--no-sbg-moe-uncertainty", action = "store_false", dest = "sbg_moe_uncertainty")
+    group.add_argument("--sbg-moe-min-strength", type = float, default = SBG_MOE_MIN_STRENGTH)
+    group.add_argument("--sbg-moe-entropy-floor", type = float, default = SBG_MOE_ENTROPY_FLOOR)
+    group.add_argument("--sbg-moe-margin-ceil", type = float, default = SBG_MOE_MARGIN_CEIL)
+    group.add_argument("--sbg-moe-load-balance-coef", type = float, default = SBG_MOE_LOAD_BALANCE_COEF)
+    group.add_argument("--adaptive-depth", action = "store_true", default = ADAPTIVE_DEPTH)
+    group.add_argument("--adaptive-min-layers", type = int, default = ADAPTIVE_MIN_LAYERS)
+    group.add_argument("--adaptive-easy-ratio", type = float, default = ADAPTIVE_EASY_RATIO)
+    group.add_argument("--latent-bottleneck", action = "store_true", default = LATENT_BOTTLENECK)
+    group.add_argument("--latent-tokens", type = int, default = LATENT_TOKENS)
+    group.add_argument("--latent-min-nodes", type = int, default = LATENT_MIN_NODES)
+    group.add_argument("--sbg-train-ready", action = "store_true", default = SBG_TRAIN_READY)
 
     group = parser.add_argument_group("Training parameters")
     group.add_argument("--epoch-count", "-e", type = int, default = EPOCH_COUNT)
@@ -147,6 +201,17 @@ def parse_args(argv = None):
 
     group = parser.add_argument_group("Testing parameters")
     group.add_argument("--test-batch-size", type = int, default = TEST_BATCH_SIZE)
+
+    group = parser.add_argument_group("PPO parameters")
+    group.add_argument("--ppo-epochs", type = int, default = PPO_EPOCHS)
+    group.add_argument("--ppo-clip-range", type = float, default = PPO_CLIP_RANGE)
+    group.add_argument("--ppo-value-coef", type = float, default = PPO_VALUE_COEF)
+    group.add_argument("--ppo-entropy-coef", type = float, default = PPO_ENTROPY_COEF)
+    group.add_argument("--ppo-gamma", type = float, default = PPO_GAMMA)
+    group.add_argument("--ppo-gae-lambda", type = float, default = PPO_GAE_LAMBDA)
+    group.add_argument("--ppo-adv-norm", action = "store_true", default = PPO_ADV_NORM)
+    group.add_argument("--no-ppo-adv-norm", action = "store_false", dest = "ppo_adv_norm")
+    group.add_argument("--ppo-target-kl", type = float, default = PPO_TARGET_KL)
 
     group = parser.add_argument_group("Checkpointing")
     group.add_argument("--output-dir", "-o", type = str, default = OUTPUT_DIR)

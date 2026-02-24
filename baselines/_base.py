@@ -11,6 +11,11 @@ class Baseline:
             rewards = torch.stack(rewards).sum(dim = 0)
             bl_vals = self.eval(vrp_dynamics)
         else:
+            # Reset MoE auxiliary loss: this path reimplements the episode loop
+            # manually and therefore bypasses learner.forward() where the reset
+            # normally lives.
+            if getattr(self.learner, 'sbg_moe_enable', False):
+                self.learner._moe_aux_loss = None
             vrp_dynamics.reset()
             cust_mask = getattr(vrp_dynamics, "cust_mask", None)
             self.learner._encode_customers(vrp_dynamics.nodes, cust_mask)
@@ -46,7 +51,8 @@ class Baseline:
                         self.learner.cust_repr,
                         edge_emb,
                         owner_bias,
-                        lookahead)
+                        lookahead,
+                        vrp_dynamics.cur_veh_mask)   # pass mask for correct MoE router context
                 else:
                     compat = self.learner._score_customers(veh_repr)
                 logp = self.learner._get_logp(compat, vrp_dynamics.cur_veh_mask)

@@ -156,19 +156,19 @@ def test_device_consistency_cpu_gpu():
 
 
 def test_head_divisibility_errors():
+	raised = False
 	try:
 		_ = GraphEncoder(layer_count=1, head_count=3, model_size=32, ff_size=64)
-		excepted = False
 	except ValueError:
-		excepted = True
-	assert excepted
+		raised = True
+	assert raised
 
+	raised = False
 	try:
 		_ = CrossEdgeFusion(head_count=3, model_size=32)
-		excepted = False
 	except ValueError:
-		excepted = True
-	assert excepted
+		raised = True
+	assert raised
 
 
 def main():

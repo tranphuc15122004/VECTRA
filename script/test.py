@@ -164,7 +164,28 @@ def main(args):
             args.edge_feat_size,
             args.cust_k,
             args.memory_size,
-            args.lookahead_hidden
+            args.lookahead_hidden,
+            args.dropout,
+            args.sbg_enable,
+            args.sbg_cand_k,
+            args.sbg_adaptive_k,
+            args.sbg_k_min,
+            args.sbg_k_max,
+            args.sbg_late_penalty,
+            args.sbg_slack_weight,
+            args.sbg_owner_weight,
+            args.sbg_moe_enable,
+            args.sbg_moe_strength,
+            args.sbg_moe_uncertainty,
+            args.sbg_moe_min_strength,
+            args.sbg_moe_entropy_floor,
+            args.sbg_moe_margin_ceil,
+            args.adaptive_depth,
+            args.adaptive_min_layers,
+            args.adaptive_easy_ratio,
+            args.latent_bottleneck,
+            args.latent_tokens,
+            args.latent_min_nodes
             )
     learner.to(dev)
     verbose_print("Done.")

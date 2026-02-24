@@ -9,7 +9,12 @@ from utils import *
 from layers import reinforce_loss
 from  baselines._base import Baseline
 import torch
-from torch.cuda.amp import autocast, GradScaler
+try:
+    from torch.amp import autocast, GradScaler as _GradScaler
+    def GradScaler(enabled=True): return _GradScaler('cuda', enabled=enabled)
+except ImportError:
+    from torch.cuda.amp import autocast, GradScaler
+_AMP_DEVICE = 'cuda'
 from torch.utils.data import DataLoader
 from torch.optim import Adam 
 from torch.optim.lr_scheduler import LambdaLR
@@ -18,6 +23,34 @@ from problems import *
 import time
 import os
 from itertools import chain
+
+
+def apply_sbg_train_ready_preset(args):
+    if not getattr(args, "sbg_train_ready", False):
+        return
+
+    args.sbg_enable = True
+    if args.sbg_cand_k <= 0:
+        args.sbg_cand_k = 16
+    args.sbg_adaptive_k = True
+    args.sbg_k_min = max(8, args.sbg_k_min)
+    if args.sbg_k_max is None:
+        args.sbg_k_max = 32
+
+    args.adaptive_depth = True
+    args.adaptive_min_layers = max(1, args.adaptive_min_layers)
+    args.adaptive_easy_ratio = 0.7 if args.adaptive_easy_ratio == 0.6 else args.adaptive_easy_ratio
+
+    args.latent_bottleneck = True
+    args.latent_tokens = 32 if args.latent_tokens <= 1 else args.latent_tokens
+    args.latent_min_nodes = 64 if args.latent_min_nodes <= 0 else args.latent_min_nodes
+
+    args.sbg_moe_enable = True
+    args.sbg_moe_strength = 0.03 if args.sbg_moe_strength <= 0 else args.sbg_moe_strength
+    args.sbg_moe_uncertainty = True
+    args.sbg_moe_min_strength = 0.01 if args.sbg_moe_min_strength <= 0 else args.sbg_moe_min_strength
+    args.sbg_moe_entropy_floor = 0.35
+    args.sbg_moe_margin_ceil = 1.5
 
 
 def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrapped_learner : Baseline, optim : Adam, device, ep, scaler: GradScaler):
@@ -44,13 +77,33 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
                 custs, mask = minibatch[0].to(device), minibatch[1].to(device)
 
             dyna = Environment(data, custs, mask, *env_params)
-            with autocast(enabled = args.amp):
+            # Safety reset: ensure stale MoE graph from a previous batch is cleared
+            # even for baselines that bypass learner.forward().
+            if getattr(bl_wrapped_learner.learner, 'sbg_moe_enable', False):
+                bl_wrapped_learner.learner._moe_aux_loss = None
+            grad_norm = 0.0
+            with autocast(_AMP_DEVICE, enabled = args.amp):
                 actions, logps, rewards, bl_vals = bl_wrapped_learner(dyna)
                 loss = reinforce_loss(logps, rewards, bl_vals)
+                if getattr(bl_wrapped_learner.learner, 'sbg_moe_enable', False):
+                    moe_aux = bl_wrapped_learner.learner._moe_aux_loss
+                    if moe_aux is not None:
+                        loss = loss + bl_wrapped_learner.learner.sbg_moe_load_balance_coef * moe_aux
 
             prob = torch.stack(logps).sum(0).exp().mean()
-            val = torch.stack(rewards).sum(0).mean()
-            bl = bl_vals[0].mean()
+            if isinstance(rewards, torch.Tensor):
+                val = rewards.mean()
+            else:
+                val = torch.stack(rewards).sum(0).mean()
+
+            if bl_vals is None:
+                bl = loss.detach().new_zeros(())
+            elif isinstance(bl_vals, torch.Tensor):
+                bl = bl_vals.mean()
+            elif len(bl_vals) == 0 or bl_vals[0] is None:
+                bl = loss.detach().new_zeros(())
+            else:
+                bl = bl_vals[0].mean()
 
             optim.zero_grad()
             if args.amp:
@@ -123,6 +176,7 @@ def val_epoch(args, test_env, learner):
     return mean.item(), std.item()
 
 def main(args):
+    apply_sbg_train_ready_preset(args)
     dev = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     torch.backends.cudnn.benchmark = True
     if args.rng_seed is not None:
@@ -223,7 +277,29 @@ def main(args):
             args.edge_feat_size,
             args.cust_k,
             args.memory_size,
-            args.lookahead_hidden
+            args.lookahead_hidden,
+            args.dropout,
+            args.sbg_enable,
+            args.sbg_cand_k,
+            args.sbg_adaptive_k,
+            args.sbg_k_min,
+            args.sbg_k_max,
+            args.sbg_late_penalty,
+            args.sbg_slack_weight,
+            args.sbg_owner_weight,
+            args.sbg_moe_enable,
+            args.sbg_moe_strength,
+            args.sbg_moe_uncertainty,
+            args.sbg_moe_min_strength,
+            args.sbg_moe_entropy_floor,
+            args.sbg_moe_margin_ceil,
+            args.sbg_moe_load_balance_coef,
+            args.adaptive_depth,
+            args.adaptive_min_layers,
+            args.adaptive_easy_ratio,
+            args.latent_bottleneck,
+            args.latent_tokens,
+            args.latent_min_nodes
             )
     learner.to(dev)
     verbose_print("Done.")
@@ -299,7 +375,7 @@ def main(args):
     train_stats = []
     val_stats = []
     test_stats = []
-    scaler = GradScaler(enabled = args.amp)
+    scaler = GradScaler(enabled = args.amp)  # wrapper above passes device_type automatically
     try:
         for ep in range(start_ep, args.epoch_count):
             train_stats.append( train_epoch(args, train_data, Environment, env_params, baseline, optim, dev, ep, scaler) )
