@@ -13,25 +13,25 @@ EPOCHS=${EPOCHS:-300}
 ITERS=${ITERS:-1000}
 BATCH=${BATCH:-1024}
 TEST_BATCH=${TEST_BATCH:-512}
-LR=${LR:-5e-5}
+LR=${LR:-1e-4}
 
-# ── Model architecture (matching old training command) ────────────────────────
+# ── Model architecture (classic MARDAM) ──────────────────────────────────────
 MODEL_SIZE=${MODEL_SIZE:-128}
-LAYER_COUNT=${LAYER_COUNT:-2}
-HEAD_COUNT=${HEAD_COUNT:-4}
-FF_SIZE=${FF_SIZE:-256}
-EDGE_FEAT_SIZE=${EDGE_FEAT_SIZE:-8}
-CUST_K=${CUST_K:-20}
-MEMORY_SIZE=${MEMORY_SIZE:-128}
-LOOKAHEAD_HIDDEN=${LOOKAHEAD_HIDDEN:-128}
-DROPOUT=${DROPOUT:-0.1}
+LAYER_COUNT=${LAYER_COUNT:-3}
+HEAD_COUNT=${HEAD_COUNT:-8}
+FF_SIZE=${FF_SIZE:-512}
+TANH_XPLOR=${TANH_XPLOR:-10}
+
+# ── Optimization ──────────────────────────────────────────────────────────────
+BASELINE=${BASELINE:-critic}
+CRITIC_LR=${CRITIC_LR:-1e-3}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0}
+MAX_GRAD_NORM=${MAX_GRAD_NORM:-2}
+NUM_WORKERS=${NUM_WORKERS:-4}
 
 # ── Checkpoint / output ───────────────────────────────────────────────────────
-# Set RESUME to a checkpoint path to continue training, e.g.:
-#   RESUME=output/DVRPTWn50m3_xxx/chkpt_ep100.pyth ./script/train_sbg_ready.sh
-# NOTE: do NOT resume from an n100m5 checkpoint — model dimensions are incompatible.
 RESUME=${RESUME:-}
+MODEL_WEIGHT=${MODEL_WEIGHT:-}
 
 cd "$(dirname "$0")/.."
 
@@ -40,7 +40,12 @@ if [[ -n "$RESUME" ]]; then
   RESUME_ARG=(--resume-state "$RESUME")
 fi
 
-PYTHONPATH=. "$PYTHON_BIN" MODEL/train.py \
+MODEL_WEIGHT_ARG=()
+if [[ -n "$MODEL_WEIGHT" ]]; then
+  MODEL_WEIGHT_ARG=(--model-weight "$MODEL_WEIGHT")
+fi
+
+PYTHONPATH=. "$PYTHON_BIN" script/train_mardam.py \
   --problem-type      "$PROBLEM_TYPE" \
   --customers-count   "$CUSTOMERS" \
   --vehicles-count    "$VEHICLES" \
@@ -50,17 +55,16 @@ PYTHONPATH=. "$PYTHON_BIN" MODEL/train.py \
   --test-batch-size   "$TEST_BATCH" \
   --learning-rate     "$LR" \
   --weight-decay      "$WEIGHT_DECAY" \
+  --max-grad-norm     "$MAX_GRAD_NORM" \
   --model-size        "$MODEL_SIZE" \
   --layer-count       "$LAYER_COUNT" \
   --head-count        "$HEAD_COUNT" \
   --ff-size           "$FF_SIZE" \
-  --edge-feat-size    "$EDGE_FEAT_SIZE" \
-  --memory-size       "$MEMORY_SIZE" \
-  --lookahead-hidden  "$LOOKAHEAD_HIDDEN" \
-  --dropout           "$DROPOUT" \
-  --baseline-type     critic \
+  --tanh-xplor        "$TANH_XPLOR" \
+  --baseline-type     "$BASELINE" \
+  --critic-rate       "$CRITIC_LR" \
   --amp \
-  --num-workers       4 \
+  --num-workers       "$NUM_WORKERS" \
   --pin-memory \
-  --sbg-train-ready \
-  "${RESUME_ARG[@]}"
+  "${RESUME_ARG[@]}" \
+  "${MODEL_WEIGHT_ARG[@]}"

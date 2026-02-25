@@ -22,14 +22,6 @@ def apply_sbg_train_ready_preset(args):
 	if not getattr(args, "sbg_train_ready", False):
 		return
 
-	args.sbg_enable = True
-	if args.sbg_cand_k <= 0:
-		args.sbg_cand_k = 16
-	args.sbg_adaptive_k = True
-	args.sbg_k_min = max(8, args.sbg_k_min)
-	if args.sbg_k_max is None:
-		args.sbg_k_max = 32
-
 	args.adaptive_depth = True
 	args.adaptive_min_layers = max(1, args.adaptive_min_layers)
 	args.adaptive_easy_ratio = 0.7 if args.adaptive_easy_ratio == 0.6 else args.adaptive_easy_ratio
@@ -37,14 +29,6 @@ def apply_sbg_train_ready_preset(args):
 	args.latent_bottleneck = True
 	args.latent_tokens = 32 if args.latent_tokens <= 1 else args.latent_tokens
 	args.latent_min_nodes = 64 if args.latent_min_nodes <= 0 else args.latent_min_nodes
-
-	args.sbg_moe_enable = True
-	args.sbg_moe_strength = 0.03 if args.sbg_moe_strength <= 0 else args.sbg_moe_strength
-	args.sbg_moe_uncertainty = True
-	args.sbg_moe_min_strength = 0.01 if args.sbg_moe_min_strength <= 0 else args.sbg_moe_min_strength
-	args.sbg_moe_entropy_floor = 0.35
-	args.sbg_moe_margin_ceil = 1.5
-
 
 def _compute_step_outputs(learner, baseline, dyna):
 	veh_repr = learner._repr_vehicle(dyna.vehicles, dyna.cur_veh_idx, dyna.mask)
@@ -144,9 +128,6 @@ def _collect_rollout(args, dataset, minibatch, Environment: VRP_Environment, env
 
 
 def _evaluate_rollout(learner, baseline, Environment: VRP_Environment, env_params, rollout):
-	# Reset MoE auxiliary loss accumulator before step-by-step re-evaluation
-	if getattr(learner, 'sbg_moe_enable', False):
-		learner._moe_aux_loss = None
 	dyna = Environment(rollout["dataset"], rollout["custs"], rollout["mask"], *env_params)
 	dyna.reset()
 
@@ -210,10 +191,6 @@ def _ppo_update(args, rollout, learner, baseline, Environment, env_params, optim
 			entropy_bonus = entropies.mean()
 
 			loss = policy_loss + args.ppo_value_coef * value_loss - args.ppo_entropy_coef * entropy_bonus
-			if getattr(learner, 'sbg_moe_enable', False):
-				moe_aux = getattr(learner, '_moe_aux_loss', None)
-				if moe_aux is not None:
-					loss = loss + learner.sbg_moe_load_balance_coef * moe_aux
 
 		optim.zero_grad()
 		if args.amp:
@@ -424,38 +401,23 @@ def main(args):
 	learner = EdgeEnhencedLearner(
 		Dataset.CUST_FEAT_SIZE,
 		Environment.VEH_STATE_SIZE,
-		args.model_size,
-		args.layer_count,
-		args.head_count,
-		args.ff_size,
-		args.tanh_xplor,
-		False,
-		args.edge_feat_size,
-		args.cust_k,
-		args.memory_size,
-		args.lookahead_hidden,
-		args.dropout,
-		args.sbg_enable,
-		args.sbg_cand_k,
-		args.sbg_adaptive_k,
-		args.sbg_k_min,
-		args.sbg_k_max,
-		args.sbg_late_penalty,
-		args.sbg_slack_weight,
-		args.sbg_owner_weight,
-		args.sbg_moe_enable,
-		args.sbg_moe_strength,
-		args.sbg_moe_uncertainty,
-		args.sbg_moe_min_strength,
-		args.sbg_moe_entropy_floor,
-		args.sbg_moe_margin_ceil,
-		args.sbg_moe_load_balance_coef,
-		args.adaptive_depth,
-		args.adaptive_min_layers,
-		args.adaptive_easy_ratio,
-		args.latent_bottleneck,
-		args.latent_tokens,
-		args.latent_min_nodes,
+		model_size = args.model_size,
+		layer_count = args.layer_count,
+		head_count = args.head_count,
+		ff_size = args.ff_size,
+		tanh_xplor = args.tanh_xplor,
+		greedy = False,
+		edge_feat_size = args.edge_feat_size,
+		cust_k = args.cust_k,
+		memory_size = args.memory_size,
+		lookahead_hidden = args.lookahead_hidden,
+		dropout = args.dropout,
+		adaptive_depth = args.adaptive_depth,
+		adaptive_min_layers = args.adaptive_min_layers,
+		adaptive_easy_ratio = args.adaptive_easy_ratio,
+		latent_bottleneck = args.latent_bottleneck,
+		latent_tokens = args.latent_tokens,
+		latent_min_nodes = args.latent_min_nodes,
 	)
 	learner.to(dev)
 	verbose_print("Done.")

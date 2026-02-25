@@ -22,6 +22,7 @@ from torch.nn.utils import clip_grad_norm_
 from problems import *
 import time
 import os
+import math
 from itertools import chain
 
 
@@ -29,13 +30,9 @@ def apply_sbg_train_ready_preset(args):
     if not getattr(args, "sbg_train_ready", False):
         return
 
-    args.sbg_enable = True
-    if args.sbg_cand_k <= 0:
-        args.sbg_cand_k = 16
-    args.sbg_adaptive_k = True
-    args.sbg_k_min = max(8, args.sbg_k_min)
-    if args.sbg_k_max is None:
-        args.sbg_k_max = 32
+    # When using actor-critic, advantage normalization helps stability significantly
+    if getattr(args, 'baseline_type', 'none') == 'critic' and not getattr(args, 'adv_norm', False):
+        args.adv_norm = True
 
     args.adaptive_depth = True
     args.adaptive_min_layers = max(1, args.adaptive_min_layers)
@@ -44,14 +41,6 @@ def apply_sbg_train_ready_preset(args):
     args.latent_bottleneck = True
     args.latent_tokens = 32 if args.latent_tokens <= 1 else args.latent_tokens
     args.latent_min_nodes = 64 if args.latent_min_nodes <= 0 else args.latent_min_nodes
-
-    args.sbg_moe_enable = True
-    args.sbg_moe_strength = 0.03 if args.sbg_moe_strength <= 0 else args.sbg_moe_strength
-    args.sbg_moe_uncertainty = True
-    args.sbg_moe_min_strength = 0.01 if args.sbg_moe_min_strength <= 0 else args.sbg_moe_min_strength
-    args.sbg_moe_entropy_floor = 0.35
-    args.sbg_moe_margin_ceil = 1.5
-
 
 def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrapped_learner : Baseline, optim : Adam, device, ep, scaler: GradScaler):
     bl_wrapped_learner.learner.train()
@@ -77,18 +66,18 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
                 custs, mask = minibatch[0].to(device), minibatch[1].to(device)
 
             dyna = Environment(data, custs, mask, *env_params)
-            # Safety reset: ensure stale MoE graph from a previous batch is cleared
-            # even for baselines that bypass learner.forward().
-            if getattr(bl_wrapped_learner.learner, 'sbg_moe_enable', False):
-                bl_wrapped_learner.learner._moe_aux_loss = None
             grad_norm = 0.0
             with autocast(_AMP_DEVICE, enabled = args.amp):
                 actions, logps, rewards, bl_vals = bl_wrapped_learner(dyna)
-                loss = reinforce_loss(logps, rewards, bl_vals)
-                if getattr(bl_wrapped_learner.learner, 'sbg_moe_enable', False):
-                    moe_aux = bl_wrapped_learner.learner._moe_aux_loss
-                    if moe_aux is not None:
-                        loss = loss + bl_wrapped_learner.learner.sbg_moe_load_balance_coef * moe_aux
+                loss = reinforce_loss(
+                    logps, rewards, bl_vals,
+                    adv_norm = getattr(args, 'adv_norm', False),
+                    entropy_coef = getattr(args, 'entropy_coef', 0.0),
+                )
+
+            if not torch.isfinite(loss):
+                optim.zero_grad(set_to_none = True)
+                continue
 
             prob = torch.stack(logps).sum(0).exp().mean()
             if isinstance(rewards, torch.Tensor):
@@ -114,6 +103,10 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
                         chain.from_iterable(grp["params"] for grp in optim.param_groups),
                         args.max_grad_norm,
                     )
+                    if not torch.isfinite(grad_norm):
+                        optim.zero_grad(set_to_none = True)
+                        scaler.update()
+                        continue
                 scaler.step(optim)
                 scaler.update()
             else:
@@ -123,6 +116,9 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
                         chain.from_iterable(grp["params"] for grp in optim.param_groups),
                         args.max_grad_norm,
                     )
+                    if not torch.isfinite(grad_norm):
+                        optim.zero_grad(set_to_none = True)
+                        continue
                 optim.step()
 
             progress.set_postfix_str("l={:.4g} p={:9.4g} val={:6.4g} bl={:6.4g} |g|={:.4g}".format(
@@ -132,7 +128,9 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
             ep_prob += prob.item()
             ep_val += val.item()
             ep_bl += bl.item()
-            ep_norm += grad_norm
+            grad_norm_val = grad_norm.item() if torch.is_tensor(grad_norm) else float(grad_norm)
+            if math.isfinite(grad_norm_val):
+                ep_norm += grad_norm_val
 
     return tuple(stat / args.iter_count for stat in (ep_loss, ep_prob, ep_val, ep_bl, ep_norm))
 
@@ -268,38 +266,23 @@ def main(args):
     learner : torch.Module = EdgeEnhencedLearner(
             Dataset.CUST_FEAT_SIZE,
             Environment.VEH_STATE_SIZE,
-            args.model_size,
-            args.layer_count,
-            args.head_count,
-            args.ff_size,
-            args.tanh_xplor,
-            False,
-            args.edge_feat_size,
-            args.cust_k,
-            args.memory_size,
-            args.lookahead_hidden,
-            args.dropout,
-            args.sbg_enable,
-            args.sbg_cand_k,
-            args.sbg_adaptive_k,
-            args.sbg_k_min,
-            args.sbg_k_max,
-            args.sbg_late_penalty,
-            args.sbg_slack_weight,
-            args.sbg_owner_weight,
-            args.sbg_moe_enable,
-            args.sbg_moe_strength,
-            args.sbg_moe_uncertainty,
-            args.sbg_moe_min_strength,
-            args.sbg_moe_entropy_floor,
-            args.sbg_moe_margin_ceil,
-            args.sbg_moe_load_balance_coef,
-            args.adaptive_depth,
-            args.adaptive_min_layers,
-            args.adaptive_easy_ratio,
-            args.latent_bottleneck,
-            args.latent_tokens,
-            args.latent_min_nodes
+            model_size = args.model_size,
+            layer_count = args.layer_count,
+            head_count = args.head_count,
+            ff_size = args.ff_size,
+            tanh_xplor = args.tanh_xplor,
+            greedy = False,
+            edge_feat_size = args.edge_feat_size,
+            cust_k = args.cust_k,
+            memory_size = args.memory_size,
+            lookahead_hidden = args.lookahead_hidden,
+            dropout = args.dropout,
+            adaptive_depth = args.adaptive_depth,
+            adaptive_min_layers = args.adaptive_min_layers,
+            adaptive_easy_ratio = args.adaptive_easy_ratio,
+            latent_bottleneck = args.latent_bottleneck,
+            latent_tokens = args.latent_tokens,
+            latent_min_nodes = args.latent_min_nodes,
             )
     learner.to(dev)
     verbose_print("Done.")
@@ -318,6 +301,11 @@ def main(args):
         baseline = RolloutBaseline(learner, args.rollout_count, args.rollout_threshold)
     elif args.baseline_type == "critic":
         baseline = CriticBaseline(learner, args.customers_count, args.critic_use_qval, args.loss_use_cumul)
+        # For actor-critic, advantage normalisation is strongly recommended to
+        # reduce gradient variance and speed up convergence.
+        if not getattr(args, 'adv_norm', False):
+            args.adv_norm = True
+            verbose_print("  [AC] Auto-enabled --adv-norm for critic baseline.")
     baseline.to(dev)
     verbose_print("Done.")
 

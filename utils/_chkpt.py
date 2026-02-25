@@ -55,18 +55,31 @@ def save_checkpoint_in_train(args, ep, learner, optim, baseline = None, lr_sched
         pass
 
 def load_checkpoint(args, learner, optim, baseline = None, lr_sched = None):
-    checkpoint = torch.load(args.resume_state)
-    learner.load_state_dict(checkpoint["model"])
+    checkpoint = torch.load(args.resume_state, map_location='cpu', weights_only=False)
+
+    # Try strict first; fall back to non-strict so that models with new MoE
+    # modules can resume from pre-MoE checkpoints (missing keys initialised
+    # from scratch) and vice-versa (unexpected keys are safely ignored).
+    try:
+        learner.load_state_dict(checkpoint["model"], strict=True)
+    except RuntimeError as e:
+        print(f"[load_checkpoint] strict load failed ({e}); retrying with strict=False")
+        result = learner.load_state_dict(checkpoint["model"], strict=False)
+        if result.missing_keys:
+            print(f"[load_checkpoint] Missing keys (will use random init): {result.missing_keys}")
+        if result.unexpected_keys:
+            print(f"[load_checkpoint] Unexpected keys (ignored): {result.unexpected_keys}")
+
     optim.load_state_dict(checkpoint["optim"])
-    if args.rate_decay is not None:
+    if args.rate_decay is not None and "lr_sched" in checkpoint:
         lr_sched.load_state_dict(checkpoint["lr_sched"])
-    if args.baseline_type == "critic":
+    if args.baseline_type == "critic" and baseline is not None and "critic" in checkpoint:
         baseline.load_state_dict(checkpoint["critic"])
     return checkpoint["ep"]
 
 import torch
 
-def load_model_weights(args, learner,  strict=True):
+def load_model_weights(args, learner, strict=False):
     """
     Load only model weights (policy network), in-place.
 
@@ -79,8 +92,8 @@ def load_model_weights(args, learner,  strict=True):
     Args:
         args.model_weight: path to checkpoint or state_dict
         learner: nn.Module (updated in-place)
-        device: map_location for torch.load
-        strict: whether to load strictly
+        strict: whether to require exact key match (default False — safe for
+                cross-version loads where MoE keys may be absent/extra)
     """
     path = getattr(args, "model_weight", None)
     if not path:
@@ -88,7 +101,7 @@ def load_model_weights(args, learner,  strict=True):
         return
 
     try:
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, map_location='cpu', weights_only=False)
     except Exception as e:
         print(f"[load_model_weights] ERROR loading '{path}': {e}")
         return

@@ -33,20 +33,26 @@ def main():
 	)
 
 	marl = EdgeEnhencedLearner(
-		data.CUST_FEAT_SIZE,
+            data.CUST_FEAT_SIZE,
 		dyna.VEH_STATE_SIZE,
-		128,
-		2,
-		4,
-		256,
-		args.tanh_xplor,
-		False,
-		args.edge_feat_size,
-		5,
-		args.memory_size,
-		args.lookahead_hidden,
-	)
-
+		model_size = args.model_size,
+		layer_count = args.layer_count,
+		head_count = args.head_count,
+		ff_size = args.ff_size,
+		tanh_xplor = args.tanh_xplor,
+		greedy = False,
+		edge_feat_size = args.edge_feat_size,
+		cust_k = args.cust_k,
+		memory_size = args.memory_size,
+		lookahead_hidden = args.lookahead_hidden,
+		dropout = args.dropout,
+		adaptive_depth = args.adaptive_depth,
+		adaptive_min_layers = args.adaptive_min_layers,
+		adaptive_easy_ratio = args.adaptive_easy_ratio,
+		latent_bottleneck = args.latent_bottleneck,
+		latent_tokens = args.latent_tokens,
+		latent_min_nodes = args.latent_min_nodes,
+		)
 	with torch.no_grad():
 		_ = marl(dyna)
 

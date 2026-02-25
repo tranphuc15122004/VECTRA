@@ -37,25 +37,10 @@ HEAD_COUNT = 8
 FF_SIZE = 512
 TANH_XPLOR = 10
 EDGE_FEAT_SIZE = 8
-CUST_K = 15
+CUST_K = None
 MEMORY_SIZE = None
 LOOKAHEAD_HIDDEN = 128
 MODEL_DROPOUT = 0.1
-SBG_ENABLE = False
-SBG_CAND_K = 0
-SBG_ADAPTIVE_K = False
-SBG_K_MIN = 8
-SBG_K_MAX = None
-SBG_LATE_PENALTY = 2.0
-SBG_SLACK_WEIGHT = 0.5
-SBG_OWNER_WEIGHT = 0.5
-SBG_MOE_ENABLE = False
-SBG_MOE_STRENGTH = 0.03
-SBG_MOE_UNCERTAINTY = True
-SBG_MOE_MIN_STRENGTH = 0.01
-SBG_MOE_ENTROPY_FLOOR = 0.35
-SBG_MOE_MARGIN_CEIL = 1.5
-SBG_MOE_LOAD_BALANCE_COEF = 0.01
 ADAPTIVE_DEPTH = False
 ADAPTIVE_MIN_LAYERS = 1
 ADAPTIVE_EASY_RATIO = 0.6
@@ -83,6 +68,8 @@ ROLLOUT_THRESHOLD = 0.05
 CRITIC_USE_QVAL = False
 CRITIC_LR = 0.001
 CRITIC_DECAY = None
+ADV_NORM = False
+ENTROPY_COEF = 0.01
 
 TEST_BATCH_SIZE = 128
 
@@ -152,22 +139,6 @@ def parse_args(argv = None):
     group.add_argument("--memory-size", type = int, default = MEMORY_SIZE)
     group.add_argument("--lookahead-hidden", type = int, default = LOOKAHEAD_HIDDEN)
     group.add_argument("--dropout", type = float, default = MODEL_DROPOUT)
-    group.add_argument("--sbg-enable", action = "store_true", default = SBG_ENABLE)
-    group.add_argument("--sbg-cand-k", type = int, default = SBG_CAND_K)
-    group.add_argument("--sbg-adaptive-k", action = "store_true", default = SBG_ADAPTIVE_K)
-    group.add_argument("--sbg-k-min", type = int, default = SBG_K_MIN)
-    group.add_argument("--sbg-k-max", type = int, default = SBG_K_MAX)
-    group.add_argument("--sbg-late-penalty", type = float, default = SBG_LATE_PENALTY)
-    group.add_argument("--sbg-slack-weight", type = float, default = SBG_SLACK_WEIGHT)
-    group.add_argument("--sbg-owner-weight", type = float, default = SBG_OWNER_WEIGHT)
-    group.add_argument("--sbg-moe-enable", action = "store_true", default = SBG_MOE_ENABLE)
-    group.add_argument("--sbg-moe-strength", type = float, default = SBG_MOE_STRENGTH)
-    group.add_argument("--sbg-moe-uncertainty", action = "store_true", default = SBG_MOE_UNCERTAINTY)
-    group.add_argument("--no-sbg-moe-uncertainty", action = "store_false", dest = "sbg_moe_uncertainty")
-    group.add_argument("--sbg-moe-min-strength", type = float, default = SBG_MOE_MIN_STRENGTH)
-    group.add_argument("--sbg-moe-entropy-floor", type = float, default = SBG_MOE_ENTROPY_FLOOR)
-    group.add_argument("--sbg-moe-margin-ceil", type = float, default = SBG_MOE_MARGIN_CEIL)
-    group.add_argument("--sbg-moe-load-balance-coef", type = float, default = SBG_MOE_LOAD_BALANCE_COEF)
     group.add_argument("--adaptive-depth", action = "store_true", default = ADAPTIVE_DEPTH)
     group.add_argument("--adaptive-min-layers", type = int, default = ADAPTIVE_MIN_LAYERS)
     group.add_argument("--adaptive-easy-ratio", type = float, default = ADAPTIVE_EASY_RATIO)
@@ -198,6 +169,10 @@ def parse_args(argv = None):
     group.add_argument("--critic-use-qval", action = "store_true", default = CRITIC_USE_QVAL)
     group.add_argument("--critic-rate", type = float, default = CRITIC_LR)
     group.add_argument("--critic-decay", type = float, default = CRITIC_DECAY)
+    group.add_argument("--adv-norm", action = "store_true", default = ADV_NORM,
+            help = "Normalize advantages to zero mean / unit std per batch (recommended for critic baseline)")
+    group.add_argument("--entropy-coef", type = float, default = ENTROPY_COEF,
+            help = "Entropy regularization coefficient (e.g. 0.01) to prevent premature policy collapse")
 
     group = parser.add_argument_group("Testing parameters")
     group.add_argument("--test-batch-size", type = int, default = TEST_BATCH_SIZE)

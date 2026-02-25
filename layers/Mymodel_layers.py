@@ -90,7 +90,7 @@ class GraphEncoderLayer(nn.Module):
 
 
 class GraphEncoder(nn.Module):
-	def __init__(self, layer_count, head_count, model_size, ff_size, k = 20,
+	def __init__(self, layer_count, head_count, model_size, ff_size, k = None,
 			adaptive_depth = False, min_layers = 1, easy_ratio = 0.6):
 		super().__init__()
 		self.k = k

@@ -5,32 +5,85 @@ import torch.nn as nn
 
 
 class CriticBaseline(Baseline):
+    """
+    Actor-Critic baseline.
+
+    The value network takes as input the current *encoded state*:
+        [veh_repr  ||  mean(cust_repr)]   shape: (N, 1, 2 * model_size)
+
+    This avoids the circular dependency of the old design (which fed raw
+    policy logits / compat scores into the critic) and gives the critic
+    a stable, policy-independent view of the environment state.
+
+    Falls back to the legacy logit-based input when the learner does not
+    expose a ``model_size`` attribute (e.g. the original AttentionLearner).
+    """
+
     def __init__(self, learner, cust_count, use_qval = True, use_cumul_reward = False, hidden_size = None):
         super().__init__(learner, use_cumul_reward)
-        self.use_qval = use_qval
+        self.use_qval = use_qval   # kept for API compatibility; ignored in state-critic mode
+
         if hidden_size is None:
-            hidden_size = 128
-        out_size = cust_count + 1 if use_qval else 1
+            hidden_size = 256
+
+        model_size = getattr(learner, 'model_size', None)
+        if model_size is not None:
+            # State-based critic: richer, policy-independent input
+            input_size = model_size * 2
+            self.use_state_critic = True
+        else:
+            # Legacy fallback: raw compatibility scores
+            input_size = cust_count + 1
+            self.use_state_critic = False
+
+        # Deeper network with normalisation for faster, more stable learning
         self.project = nn.Sequential(
-            nn.Linear(cust_count + 1, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, out_size)
+            nn.Linear(input_size, hidden_size),
+            nn.LayerNorm(hidden_size),
+            nn.GELU(),
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.GELU(),
+            nn.Linear(hidden_size // 2, 1),
         )
 
-    def eval_step(self, vrp_dynamics, learner_compat, cust_idx):
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _eval_step_state(self, veh_repr):
+        """Compute V(s) from encoded vehicle + mean-customer context.
+
+        :param veh_repr:   (N, 1, model_size) – current vehicle encoding
+        :return:           (N, 1) value estimate
+        """
+        # Global customer context: mean over the customer dimension
+        cust_context = self.learner.cust_repr.mean(dim = 1, keepdim = True)  # (N, 1, D)
+        state = torch.cat([veh_repr, cust_context], dim = -1)                # (N, 1, 2D)
+        val = self.project(state)                                             # (N, 1, 1)
+        return val.squeeze(-1)                                                # (N, 1)
+
+    def _eval_step_legacy(self, vrp_dynamics, learner_compat, cust_idx):
+        """Original logit-based value estimate (fallback for old learners)."""
         compat = learner_compat.clone()
         compat[vrp_dynamics.cur_veh_mask] = 0
         val = self.project(compat)
         if self.use_qval:
-            val = val.gather(2, cust_idx.unsqueeze(1).expand(-1,1,-1))
+            val = val.gather(2, cust_idx.unsqueeze(1).expand(-1, 1, -1))
         return val.squeeze(1)
 
+    def eval_step(self, vrp_dynamics, learner_compat, cust_idx):
+        if self.use_state_critic:
+            veh_repr = self.learner._repr_vehicle(
+                vrp_dynamics.vehicles,
+                vrp_dynamics.cur_veh_idx,
+                vrp_dynamics.mask,
+            )
+            return self._eval_step_state(veh_repr)
+        return self._eval_step_legacy(vrp_dynamics, learner_compat, cust_idx)
+
+    # ------------------------------------------------------------------
+
     def __call__(self, vrp_dynamics):
-        # Reset learnable-MoE auxiliary loss before each episode rollout.
-        # CriticBaseline bypasses learner.forward(), so the reset inside forward()
-        # is never triggered — we must do it here explicitly.
-        if getattr(self.learner, 'sbg_moe_enable', False):
-            self.learner._moe_aux_loss = None
         vrp_dynamics.reset()
         cust_mask = getattr(vrp_dynamics, "cust_mask", None)
         self.learner._encode_customers(vrp_dynamics.nodes, cust_mask)
@@ -72,8 +125,14 @@ class CriticBaseline(Baseline):
                 compat = self.learner._score_customers(veh_repr)
             logp = self.learner._get_logp(compat, vrp_dynamics.cur_veh_mask)
             cust_idx = logp.exp().multinomial(1)
+
+            # Critic value estimate
             if not(self.use_cumul and bl_vals):
-                bl_vals.append( self.eval_step(vrp_dynamics, compat, cust_idx) )
+                if self.use_state_critic:
+                    bl_vals.append( self._eval_step_state(veh_repr) )
+                else:
+                    bl_vals.append( self._eval_step_legacy(vrp_dynamics, compat, cust_idx) )
+
             if hasattr(self.learner, "_update_memory") and "edge_emb" in locals():
                 self.learner._update_memory(vrp_dynamics.cur_veh_idx, cust_idx, veh_repr, edge_emb)
             actions.append( (vrp_dynamics.cur_veh_idx, cust_idx) )

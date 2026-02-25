@@ -14,7 +14,16 @@ from torch.optim.lr_scheduler import LambdaLR
 from problems import *
 import time
 import os
+from torch.nn.parameter import UninitializedParameter
 
+
+def _count_params(model):
+    total = 0
+    for p in model.parameters():
+        if not p.requires_grad or isinstance(p, UninitializedParameter):
+            continue
+        total += p.numel()
+    return total
 
 def test_epoch(args, test_env, learner, ref_costs):
     learner.eval()
@@ -152,43 +161,47 @@ def main(args):
     # MODEL
     verbose_print("Initializing attention model...",
         end = " ", flush = True)
-    learner : torch.Module = EdgeEnhencedLearner(
+    """ learner : torch.Module = EdgeEnhencedLearner(
             Dataset.CUST_FEAT_SIZE,
             Environment.VEH_STATE_SIZE,
-            args.model_size,
-            args.layer_count,
-            args.head_count,
-            args.ff_size,
-            args.tanh_xplor,
-            False,
-            args.edge_feat_size,
-            args.cust_k,
-            args.memory_size,
-            args.lookahead_hidden,
-            args.dropout,
-            args.sbg_enable,
-            args.sbg_cand_k,
-            args.sbg_adaptive_k,
-            args.sbg_k_min,
-            args.sbg_k_max,
-            args.sbg_late_penalty,
-            args.sbg_slack_weight,
-            args.sbg_owner_weight,
-            args.sbg_moe_enable,
-            args.sbg_moe_strength,
-            args.sbg_moe_uncertainty,
-            args.sbg_moe_min_strength,
-            args.sbg_moe_entropy_floor,
-            args.sbg_moe_margin_ceil,
-            args.adaptive_depth,
-            args.adaptive_min_layers,
-            args.adaptive_easy_ratio,
-            args.latent_bottleneck,
-            args.latent_tokens,
-            args.latent_min_nodes
-            )
+            model_size = args.model_size,
+            layer_count = args.layer_count,
+            head_count = args.head_count,
+            ff_size = args.ff_size,
+            tanh_xplor = args.tanh_xplor,
+            greedy = False,
+            edge_feat_size = args.edge_feat_size,
+            cust_k = args.cust_k,
+            memory_size = args.memory_size,
+            lookahead_hidden = args.lookahead_hidden,
+            dropout = args.dropout,
+            adaptive_depth = args.adaptive_depth,
+            adaptive_min_layers = args.adaptive_min_layers,
+            adaptive_easy_ratio = args.adaptive_easy_ratio,
+            latent_bottleneck = args.latent_bottleneck,
+            latent_tokens = args.latent_tokens,
+            latent_min_nodes = args.latent_min_nodes,
+            ) """
+
+
+    learner : torch.Module = AttentionLearner(
+		Dataset.CUST_FEAT_SIZE,
+        Environment.VEH_STATE_SIZE,
+		128,
+		3,
+		8,
+		512,
+		args.tanh_xplor,
+	)
     learner.to(dev)
     verbose_print("Done.")
+
+    # Initialize lazy parameters before reporting parameter count.
+    with torch.no_grad():
+        dyna_warmup = Environment(train_data, train_data.nodes[:1].to(dev), None, *env_params)
+        _ = learner(dyna_warmup)
+    
+    print("EdgeEnhencedLearner params:", _count_params(learner))
 
     # BASELINE
     verbose_print("Initializing '{}' baseline...".format(
