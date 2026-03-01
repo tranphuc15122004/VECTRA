@@ -1,7 +1,7 @@
 # VECTRA — Vehicle-Edge-Coordination Transformer with Routed Attention
 
 > **V**ehicle-**E**dge-**C**oordination **T**ransformer with **R**outed **A**ttention  
-> A Scale-Balanced Graph-MoE MARL framework for Dynamic Vehicle Routing with Time Windows (DVRPTW)
+> A Feature-Disentangled Graph-MoE MARL framework for Dynamic Vehicle Routing with Time Windows (DVRPTW)
 
 ---
 
@@ -15,14 +15,14 @@
    - 3.3 [Cross-Scale Generalisation](#33-cross-scale-generalisation)
 4. [Architecture Overview](#4-architecture-overview)
 5. [Component Details](#5-component-details)
-   - 5.1 [Graph Encoder](#51-graph-encoder--hybrid-knn-transformer)
+   - 5.1 [VECTRA Graph Encoder](#51-vectra-graph-encoder--feature-disentangled-anisotropic-graph-transformer)
    - 5.2 [Latent Bottleneck](#52-latent-bottleneck)
    - 5.3 [Fleet Encoder & Coordination Memory](#53-fleet-encoder--coordination-memory)
    - 5.4 [Edge Feature Encoder](#54-edge-feature-encoder)
    - 5.5 [Cross-Edge Fusion](#55-cross-edge-fusion)
    - 5.6 [Ownership Head](#56-ownership-head)
    - 5.7 [Lookahead Head](#57-lookahead-head)
-   - 5.8 [Score Fusion & MoE](#58-score-fusion--mixture-of-experts)
+   - 5.8 [Situation-Aware MoE Score Fusion](#58-situation-aware-moe-score-fusion)
    - 5.9 [Candidate Shortlist (SBG)](#59-candidate-shortlist-sbg)
    - 5.10 [Adaptive Depth](#510-adaptive-depth)
 6. [Training Objective](#6-training-objective)
@@ -82,7 +82,7 @@ $M$ = latent bottleneck tokens, $K$ = shortlist size, $k$ = KNN neighbourhood si
 
 | Module | Complexity |
 |---|---|
-| KNN-masked Graph Encoder (per layer) | $O(L_c k d)$ |
+| VECTRA Graph Encoder (per layer, KNN-masked) | $O(L_c k d + L_c^2 R)$ where $R=6$ |
 | Latent Bottleneck cross-attention | $O(L_c M d)$ |
 | Fleet Encoder (per vehicle, per layer) | $O(L_v L_c d)$ |
 | SBG candidate selection | $O(L_c)$ |
@@ -135,54 +135,65 @@ where $W_1$ is the Wasserstein-1 distance and $\xi > 0$ is reduced by the **mult
 ## 4. Architecture Overview
 
 ```
-INPUT: customers C_t, vehicles V, dynamic arrivals
+INPUT: customers C_t (x,y,demand,tw_s,tw_e,svc,arr), vehicles V, dynamic arrivals
          │
          ▼
-┌─────────────────────────────────────────────────────────┐
-│              STEP 1: Customer Encoding                  │
-│   Depot + Customer Embeddings (Linear)                  │
-│   ──► KNN-masked Graph Encoder (RBF edge bias)          │
-│   ──► [optional Latent Bottleneck, M tokens]            │
-│   ──► Dropout + Linear project → cust_repr  N×Lc×D     │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                 STEP 1: Customer Encoding                       │
+│   Depot + Customer Embeddings (Linear)                          │
+│   ──► NodeStructuralEncoding (centrality, TW urgency,           │
+│        TW midpoint, demand significance → D)                    │
+│   ──► VECTRAPairwiseFeatures (spatial, temporal, demand → 6D)   │
+│   ──► VECTRA Graph Encoder (Disentangled MHA + Edge Values)     │
+│        • Spatial heads ← distance bias                          │
+│        • Temporal heads ← TW overlap/precedence bias            │
+│        • Demand heads ← demand diff/load bias                   │
+│        • Cross heads ← all-feature bias                         │
+│        • Edge-valued messages: out += σ(g)·W_e·e_ij             │
+│   ──► [optional Latent Bottleneck, M tokens]                    │
+│   ──► Dropout + Linear project → cust_repr  N×Lc×D              │
+└─────────────────────────────────────────────────────────────────┘
          │
          ▼
-┌─────────────────────────────────────────────────────────┐
-│    STEP 2: Vehicle Context + Coordination Memory        │
-│   Fleet Encoder (cross-att on cust_repr)               │
-│   CoordinationMemory (per-vehicle GRU-like state)       │
-│   ──► veh_repr  N×1×D                                  │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│       STEP 2: Vehicle Context + Coordination Memory             │
+│   Fleet Encoder (cross-att on cust_repr)                       │
+│   CoordinationMemory (per-vehicle GRU-like state)               │
+│   ──► veh_repr  N×1×D                                          │
+└─────────────────────────────────────────────────────────────────┘
          │
          ▼
-┌─────────────────────────────────────────────────────────┐
-│         STEP 3: Edge Feature Construction               │
-│   dist, travel_time, arrival, wait, late,               │
-│   slack, feasibility, cap_gap                           │
-│   ──► EdgeFeatureEncoder → edge_emb  N×1×Lc×D          │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│            STEP 3: Edge Feature Construction                    │
+│   dist, travel_time, arrival, wait, late,                       │
+│   slack, feasibility, cap_gap                                   │
+│   ──► EdgeFeatureEncoder → edge_emb  N×1×Lc×D                  │
+└─────────────────────────────────────────────────────────────────┘
          │
          ▼
-┌─────────────────────────────────────────────────────────┐
-│         STEP 4: SBG Candidate Shortlist                 │
-│   cheap_score = -dist - λ·late + μ·slack + ω·owner     │
-│   Select top-K feasible candidates → cand_idx           │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│            STEP 4: SBG Candidate Shortlist                      │
+│   cheap_score = -dist - λ·late + μ·slack + ω·owner             │
+│   Select top-K feasible candidates → cand_idx                   │
+└─────────────────────────────────────────────────────────────────┘
          │
          ▼
-┌─────────────────────────────────────────────────────────┐
-│         STEP 5: Deep Scoring on Shortlist               │
-│   CrossEdgeFusion  → att_score                          │
-│   OwnershipHead    → owner_bias                         │
-│   LookaheadHead    → look_score                         │
-│            │  z-normalise each stream                   │
-│            ▼  Score Fusion MLP  (3→64→1)                │
-│   ┌─── compat_base ───┐                                 │
-│   │ MoE: uncertainty- │                                 │
-│   │ gated blending    │                                 │
-│   └───────────────────┘                                 │
-│   Tanh exploration cap  → compat  N×1×K                 │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│            STEP 5: Deep Scoring on Shortlist                    │
+│   CrossEdgeFusion  → att_score                                  │
+│   OwnershipHead    → owner_bias                                 │
+│   LookaheadHead    → look_score                                 │
+│            │  z-normalise each stream → (N,1,L,3)               │
+│            ▼                                                    │
+│   ┌── AdaptiveExpertScoreFusion (MoE) ──────────────────┐       │
+│   │  K=4 Expert MLPs (scores→hidden→scalar)             │       │
+│   │  Situation Gate: [veh_repr‖graph_ctx] → K logits    │       │
+│   │  Candidate Gate: scores + edge_emb → K logits       │       │
+│   │  α·sit_gate + (1-α)·cand_gate → soft routing        │       │
+│   │  Σ_k gate_k · expert_k(scores) → fused score        │       │
+│   └─────────────────────────────────────────────────────┘       │
+│   Tanh exploration cap  → compat  N×1×K                         │
+└─────────────────────────────────────────────────────────────────┘
          │
          ▼
    log_softmax → scatter to full Lc
@@ -198,15 +209,70 @@ INPUT: customers C_t, vehicles V, dynamic arrivals
 
 ## 5. Component Details
 
-### 5.1 Graph Encoder — Hybrid KNN-Transformer
+### 5.1 VECTRA Graph Encoder — Feature-Disentangled Anisotropic Graph Transformer
 
-**Purpose:** Produce context-rich customer representations that capture both local spatial structure (KNN masking) and long-range dependencies (Transformer self-attention).
+**Purpose:** Produce context-rich customer representations that exploit the full multi-relational structure of the DVRPTW customer graph — spatial proximity, temporal compatibility, and demand coupling — rather than relying solely on Euclidean distance.
 
-**RBF Edge Bias.** Raw Euclidean distances are embedded into $B=16$ Radial Basis Functions:
+**Key insight from DVRPTW:** Two customers may be spatially close yet routing-incompatible (conflicting time windows) or spatially distant yet highly compatible (complementary TW, low combined demand). A single distance scalar collapses these distinctions. VECTRA factorises the graph structure into multiple explicit relation types and feeds them into specialised attention head groups.
 
-$$\phi_b(d) = \exp\!\left(-\frac{(d - c_b)^2}{2 w^2}\right), \quad c_b = \frac{b}{B-1}, \; b=0,\dots,B-1$$
+#### 5.1.1 Node Structural Encoding
 
-These are projected to per-head attention biases via a small MLP, geometrically grounding attention in physical space.
+Before entering the Transformer layers, initial embeddings $\mathbf h_i^{(0)}$ are enriched with problem-aware positional features:
+
+$$\mathbf h_i^{(0)} \leftarrow \mathbf h_i^{(0)} + \text{MLP}_{4 \to D}\!\left([\text{cent}_i;\; \text{urg}_i;\; \text{mid}_i;\; \text{dem}_i]\right)$$
+
+| Feature | Formula | Captures |
+|---|---|---|
+| Centrality | $\text{cent}_i = \frac{1}{L}\sum_j d_{ij} \big/ \max_k \text{cent}_k$ | Spatial role (hub vs. periphery) |
+| TW urgency | $\text{urg}_i = \frac{1}{e_i - s_i} \big/ \max_k \text{urg}_k$ | Scheduling pressure |
+| TW midpoint | $\text{mid}_i = \frac{s_i + e_i}{2}$ (normalised) | Temporal position |
+| Demand significance | $\text{dem}_i = \frac{q_i}{\max_k q_k}$ | Capacity importance |
+
+#### 5.1.2 Multi-Relational Pairwise Features
+
+For every pair of nodes $(i, j)$, six pairwise features are computed, forming $\mathbf E \in \mathbb R^{L \times L \times 6}$:
+
+| Index | Feature | Type | Formula |
+|---|---|---|---|
+| 0 | Distance | Spatial | $\bar d_{ij} = d_{ij} / \max d$ |
+| 1 | TW overlap ratio | Temporal | $\frac{\min(e_i,e_j) - \max(s_i,s_j)}{\max(w_i,w_j)}$ clipped to $[0,1]$ |
+| 2 | Forward precedence | Temporal | $\sigma\!\left(\frac{s_j - e_i}{\tau}\right)$ — soft $P(j \text{ after } i)$ |
+| 3 | Backward precedence | Temporal | $\sigma\!\left(\frac{s_i - e_j}{\tau}\right)$ — soft $P(i \text{ after } j)$ |
+| 4 | Demand difference | Demand | $|\bar q_i - \bar q_j|$ |
+| 5 | Combined load | Demand | $(\bar q_i + \bar q_j)/2$ |
+
+where $\tau$ is a learnable temperature (default 0.1) and $\sigma$ is the sigmoid function.
+
+#### 5.1.3 Disentangled Attention Heads
+
+Attention heads are partitioned into four **specialised groups**, each receiving bias from a different subset of pairwise features:
+
+| Group | Input features | # Heads | Captures |
+|---|---|---|---|
+| Spatial | $\mathbf E[\dots, 0]$ | $H/4$ | Proximity patterns |
+| Temporal | $\mathbf E[\dots, 1{:}4]$ | $H/4$ | TW compatibility |
+| Demand | $\mathbf E[\dots, 4{:}6]$ | $H/4$ | Capacity coupling |
+| Cross | $\mathbf E[\dots, 0{:}6]$ | $H/4$ | Arbitrary joint patterns |
+
+Each group $g$ has its own MLP: $\text{bias}^{(g)} = \text{MLP}_g(\mathbf E_g) \in \mathbb R^{L \times L \times H_g}$.
+
+The full attention score for head $h$ in group $g$:
+
+$$\alpha_{ij}^{(h)} = \frac{\mathbf q_i^{(h)} \cdot \mathbf k_j^{(h)}}{\sqrt{d_h}} + \text{bias}_{ij}^{(h)}, \quad j \in \mathcal N_k(i)$$
+
+**Theoretical interpretation:** This is equivalent to learning a soft mixture of relation-specific graph kernels. Each head group defines a different soft adjacency over the customer graph, while cross-heads capture non-decomposable interactions.
+
+#### 5.1.4 Edge-Valued Message Passing
+
+Standard edge-biased attention (Graphormer, etc.) controls only **who** is attended to via $\alpha_{ij}$. VECTRA additionally controls **what** information flows along each edge by injecting pairwise features into the value stream:
+
+$$\mathbf o_i = \sum_j \alpha_{ij} \cdot \left(W_v \mathbf h_j + \sigma(g^{(h)}) \cdot W_e \mathbf E_{ij}\right)$$
+
+where $g^{(h)}$ is a learnable per-head gate initialised at $-2$ (so $\sigma(g) \approx 0.12$), allowing the model to gradually open the edge-value channel during training.
+
+**Why this matters:** Consider two customers $j_1, j_2$ equidistant from $i$ with identical embeddings but different time windows. Standard attention assigns them identical messages. Edge-valued passing differentiates them by injecting their distinct temporal pairwise features.
+
+#### 5.1.5 KNN Mask & Adaptive Depth
 
 **KNN mask.** For each node, only its $k$-nearest neighbours (in normalised distance space) are attended to; all other entries are set to $-\infty$ before softmax. Complexity per layer drops from $O(L_c^2)$ to $O(L_c k)$.
 
@@ -216,11 +282,11 @@ $$D_{\text{use}} = D_{\min} + \left\lfloor (D - D_{\min}) \cdot \text{clamp}\!\l
 
 where $r_{\text{visible}}$ is the fraction of unmasked customers.
 
-**Layer equations:**
+#### 5.1.6 Full Layer Equations
 
-$$e_{ij}^{(h)} = \frac{\mathbf q_i^{(h)} \cdot \mathbf k_j^{(h)}}{\sqrt{d_h}} + \text{EdgeMLP}(\phi(d_{ij}))^{(h)}, \quad j \in \mathcal N_k(i)$$
+$$\mathbf H' = \text{LayerNorm}\!\bigl(\mathbf H + \text{DisentangledMHA}(\mathbf H, \mathbf E)\bigr)$$
 
-$$\mathbf H'' = \text{LayerNorm}\!\bigl(\mathbf H' + \text{FFN}(\mathbf H')\bigr)$$
+$$\mathbf H'' = \text{LayerNorm}\!\bigl(\mathbf H' + \text{FFN}_{\text{GELU}}(\mathbf H')\bigr)$$
 
 ### 5.2 Latent Bottleneck
 
@@ -297,32 +363,78 @@ $$\text{look}_{v,c} = W_2 \cdot \text{ReLU}\!\left(W_1 \cdot [\mathbf h_v^{\text
 
 The lookahead score penalises assignments likely to cause future lateness or infeasibility.
 
-### 5.8 Score Fusion & Mixture of Experts
+### 5.8 Situation-Aware MoE Score Fusion
 
-**Z-normalisation** across the candidate dimension ensures all three streams contribute equally:
+**Motivation.** The relative importance of scoring signals changes dramatically with the decision context:
+
+| Situation | Dominant signal | Why |
+|---|---|---|
+| Early route, high capacity, wide TW | Attention (proximity) | Spatial efficiency drives cost |
+| Tight time windows, deadline pressure | Lookahead (urgency) | Feasibility constraints dominate |
+| Low remaining capacity | Ownership (coordination) | Demand fitting is critical |
+| Multiple vehicles competing | Ownership + Lookahead | Conflict avoidance matters most |
+
+A static MLP applies identical fusion weights regardless of context. The **AdaptiveExpertScoreFusion** module learns $K$ distinct fusion strategies and dynamically selects them via context-conditioned gating.
+
+#### 5.8.1 Z-Normalisation
 
 $$\tilde s = \frac{s - \bar s}{\sigma_s + 10^{-8}}$$
 
-**Fusion MLP:**
+Applied independently to each of the three score streams (attention, ownership, lookahead) across the candidate dimension.
 
-$$\text{compat\_base}_{v,c} = \text{MLP}_{3\to 64 \to 1}\!\left([\tilde s_{\text{att}};\, \tilde s_{\text{own}};\, \tilde s_{\text{look}}]\right)$$
+#### 5.8.2 Expert Networks
 
-**Mixture of Experts.** Two specialist experts blend with the base score:
+$K=4$ experts, each a small MLP fusing the normalised score vector:
 
-| Expert | Formula | Regime |
-|---|---|---|
-| Local (myopic) | $0.7\tilde s_{\text{att}} + 0.9\tilde s_{\text{own}} - 0.2\tilde s_{\text{look}}$ | Low feasibility ($r_f < 0.35$) |
-| Future-aware | $0.4\tilde s_{\text{att}} + 0.3\tilde s_{\text{own}} - 0.9\tilde s_{\text{look}}$ | High lookahead variance ($\sigma_{\text{look}} > 0.9$) |
+$$\text{expert}_k(\tilde{\mathbf s}) = W_2^{(k)} \cdot \text{GELU}\!\left(W_1^{(k)} \tilde{\mathbf s} + b_1^{(k)}\right) + b_2^{(k)}, \quad k=1,\dots,K$$
 
-**Uncertainty-gated blending:**
+where $W_1^{(k)} \in \mathbb R^{S \times H_e}$, $W_2^{(k)} \in \mathbb R^{H_e \times 1}$, $S=3$ score sources, $H_e=32$ hidden.
 
-$$H = -\sum_c p_c \log p_c, \qquad \Delta = q_{(1)} - q_{(2)}$$
+**Diversity-aware initialisation:** Expert $k$ receives a positive bias toward score source $k \bmod S$, encouraging initial specialisation that can be refined during training.
 
-$$\alpha = \Bigl(\alpha_{\min} + (\alpha_{\max} - \alpha_{\min}) \cdot \tfrac{H / H_{\max}}{1 + \Delta}\Bigr) \cdot \mathbf 1\!\left[H > H_{\text{floor}} \;\wedge\; \Delta < \Delta_{\text{ceil}}\right]$$
+All experts are computed in a single batched operation via `einsum` rather than $K$ separate forward passes.
 
-$$\text{compat} = \text{compat\_base} + \alpha_{\text{local}} \cdot \delta_{\text{local}} + \alpha_{\text{fut}} \cdot \delta_{\text{fut}}$$
+#### 5.8.3 Dual-Granularity Gating
 
-**Tanh exploration cap:**
+Two gating mechanisms at different granularities:
+
+**Situation gate** (instance-level, global context):
+
+$$\mathbf g^{\text{sit}} = \text{MLP}_{2D \to H_g \to K}\!\left([\mathbf h_v;\; \bar{\mathbf H}^{\text{cust}}]\right) \in \mathbb R^{1 \times K}$$
+
+where $\bar{\mathbf H}^{\text{cust}} = \frac{1}{L}\sum_j \mathbf h_j^{\text{cust}}$ is the graph-level summary. This captures the vehicle's global situation (route progress, remaining capacity, fleet state).
+
+**Candidate gate** (per-candidate, local context):
+
+$$\mathbf g_c^{\text{cand}} = W_{\text{cand}} \tilde{\mathbf s}_c + W_{\text{edge}} \mathbf e_{v,c} \in \mathbb R^K$$
+
+This captures per-candidate context: whether this candidate is more proximity-driven (high att, low look) or urgency-driven (low att, high look).
+
+**Balanced combination:**
+
+$$\mathbf g_c = \alpha \cdot \mathbf g^{\text{sit}} + (1-\alpha) \cdot \mathbf g_c^{\text{cand}}, \quad \alpha = \sigma(\beta)$$
+
+where $\beta$ is a learnable scalar initialised at 0 (so $\alpha = 0.5$, equal initial weighting).
+
+**Gate weights:**
+
+$$w_c^{(k)} = \text{softmax}_k(\mathbf g_c + \epsilon), \quad \epsilon \sim \mathcal N(0, \sigma_{\text{noise}}^2) \text{ during training}$$
+
+The noise $\epsilon$ encourages exploration of different expert combinations during training (Shazeer et al., 2017).
+
+#### 5.8.4 Fused Score
+
+$$\text{compat}_{v,c} = \sum_{k=1}^K w_c^{(k)} \cdot \text{expert}_k(\tilde{\mathbf s}_c)$$
+
+#### 5.8.5 Load-Balancing Auxiliary Loss
+
+To prevent expert collapse (all tokens routed to one expert), a standard MoE load-balancing loss is applied:
+
+$$\mathcal L_{\text{moe}} = K \cdot \sum_{k=1}^K f_k \cdot P_k$$
+
+where $f_k = \frac{1}{|\mathcal B|}\sum_{c \in \mathcal B} \mathbf 1[\arg\max w_c = k]$ is the routing fraction (detached) and $P_k = \frac{1}{|\mathcal B|}\sum_{c \in \mathcal B} w_c^{(k)}$ is the mean gate probability (with gradient).
+
+#### 5.8.6 Tanh Exploration Cap
 
 $$\tilde{\text{compat}} = C \cdot \tanh\!\left(\text{compat} / C\right), \quad C = 10$$
 
@@ -374,11 +486,11 @@ $$\mathcal L_{\text{scale}} = \mathbb{E}_{n \ne m}\!\left[\text{KL}\!\left(\pi_\
 
 $$\mathcal L_{\text{distill}} = \mathbb{E}\!\left[\text{KL}\!\left(\text{softmax}(\mathbf q_{\text{dense}}) \;\|\; \text{softmax}(\mathbf q_{\text{SBG}})\right)\right]$$
 
-**MoE load-balance loss:**
+**MoE load-balance loss** (see §5.8.5):
 
-$$\mathcal L_{\text{moe-balance}} = L_v \cdot \sum_e f_e \cdot P_e$$
+$$\mathcal L_{\text{moe-balance}} = K \cdot \sum_{k=1}^K f_k \cdot P_k$$
 
-where $f_e$ is the fraction of tokens routed to expert $e$ and $P_e$ is the mean routing probability.
+where $f_k$ is the routing fraction to expert $k$ (detached) and $P_k$ is the mean gate probability (with gradient). Coefficient $\lambda_{\text{lb}}$ is controlled by `--moe_aux_coef` (default 0.01).
 
 **Training infrastructure:** Mixed-precision AMP, gradient clipping, `LambdaLR` decay, `GradScaler`.
 
@@ -392,7 +504,7 @@ flowchart TD
     B --> C{dyna.done?}
     C -- Yes --> Z([Return actions / logps / rewards])
     C -- No --> D{new_customers?}
-    D -- Yes --> E[_encode_customers\nDepot + Cust Embedding\nKNN Graph Encoder\nLatent Bottleneck optional\nDropout + Linear project]
+    D -- Yes --> E[_encode_customers\nDepot + Cust Embedding\n+ NodeStructuralEncoding\nVECTRA Graph Encoder:\n  PairwiseFeatures spatial/temporal/demand\n  Disentangled MHA + Edge-Valued Messages\nLatent Bottleneck optional\nDropout + Linear project]
     D -- No --> F
     E --> F[_repr_vehicle\nFleet Encoder cross-att\n→ veh_repr  N×1×D]
     F --> G[_build_edge_features\ndist travel_time arrival\nwait late slack feasible cap_gap]
@@ -405,11 +517,8 @@ flowchart TD
     L --> N
     M --> N[LookaheadHead\nveh+cust+edge → MLP → look_score  N×1×K]
     N --> O[CrossEdgeFusion\nmulti-head att + edge bias\n→ att_score  N×1×K]
-    O --> P[Z-normalise 3 streams\nScore Fusion MLP 3→64→1\n→ compat_base]
-    P --> Q{sbg_moe_enable\nAND high entropy?}
-    Q -- Yes --> R[Compute H and margin Δ\nGate strength α\nBlend expert_local / expert_future]
-    R --> S
-    Q -- No --> S[Tanh cap  C·tanh compat/C]
+    O --> P[Z-normalise 3 streams → N×1×K×3\nAdaptiveExpertScoreFusion MoE:\n  Situation Gate: veh_repr + graph_ctx\n  Candidate Gate: scores + edge_emb\n  4 Expert MLPs, soft routing\n→ compat  N×1×K]
+    P --> S[Tanh cap  C·tanh compat/C]
     S --> T[_get_logp\nlog_softmax mask infeasible]
     T --> U{sbg scatter?}
     U -- Yes --> V[Scatter logp_local → full Lc dim]
@@ -447,13 +556,17 @@ Key hyperparameters passed via `argparse` in [script/train_mardam.py](script/tra
 | `--sbg_late_penalty` | 2.0 | $\lambda_{\text{late}}$ |
 | `--sbg_slack_weight` | 0.5 | $\mu_{\text{slack}}$ |
 | `--sbg_owner_weight` | 0.5 | $\omega_{\text{own}}$ |
-| **MoE** | | |
-| `--sbg_moe_enable` | False | Enable MoE blending |
-| `--sbg_moe_strength` | 0.15 | Maximum $\alpha$ |
-| `--sbg_moe_uncertainty` | True | Gate by entropy/margin |
-| `--sbg_moe_min_strength` | 0.01 | Minimum $\alpha$ |
-| `--sbg_moe_entropy_floor` | 0.35 | $H_{\text{floor}}$ |
-| `--sbg_moe_margin_ceil` | 1.5 | $\Delta_{\text{ceil}}$ |
+| **VECTRA Graph Encoder** | | |
+| `--temporal_temperature` | 0.1 | Precedence sigmoid temperature $\tau$ |
+| `--knn_k` | 15 | KNN sparsification neighbourhood (= `cust_k`) |
+| `--pairwise_features` | 6 | Number of pairwise relation features $R$ |
+| `--structural_features` | 4 | Per-node structural features (centrality, urgency, midpoint, demand) |
+| **MoE Score Fusion** | | |
+| `--moe_num_experts` | 4 | Number of expert fusion networks $K$ |
+| `--moe_expert_hidden` | 32 | Expert MLP hidden dimension $H_e$ |
+| `--moe_gate_hidden` | 64 | Gating MLP hidden dimension $H_g$ |
+| `--moe_gate_noise` | 0.1 | Gate noise $\sigma_{\text{noise}}$ (training) |
+| `--moe_aux_coef` | 0.01 | Load-balance loss coefficient $\lambda_{\text{lb}}$ |
 | **Adaptive Depth** | | |
 | `--adaptive_depth` | False | Enable adaptive layers |
 | `--adaptive_min_layers` | 1 | $D_{\min}$ |
@@ -522,8 +635,12 @@ python script/eval_learned_dyn.py \
 
 - Kool et al., *Attention, Learn to Solve Routing Problems!*, ICLR 2019  
 - Gutierrez-Bucheli et al., *MARDAM*, 2022  
-- Fedus et al., *Switch Transformers*, JMLR 2022  
+- Fedus et al., *Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity*, JMLR 2022  
+- Shazeer et al., *Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer*, ICLR 2017  
+- Ying et al., *Do Transformers Really Perform Bad for Graph Representation? — Graphormer*, NeurIPS 2021  
 - Velickovic et al., *Graph Attention Networks*, ICLR 2018  
+- Kwon et al., *POMO: Policy Optimization with Multiple Optima for Reinforcement Learning*, NeurIPS 2020  
+- Bi et al., *Learning Generalizable Models for Vehicle Routing Problems via Knowledge Distillation*, NeurIPS 2022  
 
 ---
 

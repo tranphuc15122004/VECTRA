@@ -5,15 +5,15 @@ PYTHON_BIN=${PYTHON_BIN:-/home/phuc/miniconda3/envs/kaggle/bin/python}
 
 # ── Problem ───────────────────────────────────────────────────────────────────
 PROBLEM_TYPE=${PROBLEM_TYPE:-dvrptw}
-CUSTOMERS=${CUSTOMERS:-50}
+CUSTOMERS=${CUSTOMERS:-20}
 VEHICLES=${VEHICLES:-3}
 
 # ── Training schedule ─────────────────────────────────────────────────────────
-EPOCHS=${EPOCHS:-300}
-ITERS=${ITERS:-1000}
-BATCH=${BATCH:-1024}
+EPOCHS=${EPOCHS:-5}
+ITERS=${ITERS:-50}
+BATCH=${BATCH:-124}
 TEST_BATCH=${TEST_BATCH:-512}
-LR=${LR:-5e-5}
+LR=${LR:-1e-4}
 
 # ── Model architecture (matching old training command) ────────────────────────
 MODEL_SIZE=${MODEL_SIZE:-128}

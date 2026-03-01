@@ -1,11 +1,13 @@
 from layers import (
     GraphEncoder,
+    VECTRAGraphEncoder,
     FleetEncoder,
     CrossEdgeFusion,
     CoordinationMemory,
     OwnershipHead,
     LookaheadHead,
     EdgeFeatureEncoder,
+    AdaptiveExpertScoreFusion,
 )
 import torch
 import torch.nn as nn
@@ -56,12 +58,11 @@ class EdgeEnhencedLearner(nn.Module):
 
         self.depot_embedding = nn.Linear(cust_feat_size, model_size)
         self.cust_embedding  = nn.Linear(cust_feat_size, model_size)
-        self.cust_encoder    = GraphEncoder(
+        self.cust_encoder    = VECTRAGraphEncoder(
             layer_count,
             head_count,
             model_size,
             ff_size,
-            k = cust_k,
             adaptive_depth = adaptive_depth,
             min_layers = adaptive_min_layers,
             easy_ratio = adaptive_easy_ratio,
@@ -86,12 +87,16 @@ class EdgeEnhencedLearner(nn.Module):
         self.cust_project    = nn.Linear(model_size, model_size)
         self.veh_project     = nn.Linear(model_size, model_size)
 
-        # Advanced score fusion MLP to capture complex interactions between 
-        # attention, vehicle-customer ownership/coordination, and lookahead scores.
-        self.score_fusion = nn.Sequential(
-            nn.Linear(3, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1)
+        # Situation-Aware MoE score fusion: K experts with dual-granularity
+        # context-conditioned gating for adaptive score combination.
+        self.score_fusion = AdaptiveExpertScoreFusion(
+            num_experts = 4,
+            model_size  = model_size,
+            num_scores  = 3,
+            expert_hidden = 32,
+            gate_hidden = model_size // 2,
+            gate_noise  = 0.1,
+            dropout     = dropout,
         )
 
         self.dropout         = nn.Dropout(dropout)
@@ -125,16 +130,17 @@ class EdgeEnhencedLearner(nn.Module):
     def _encode_customers_bottleneck(self, cust_emb, customers, mask):
         idx = self._build_bottleneck_indices(customers.size(1), self.latent_tokens, customers.device)
         idx_exp_d = idx[None, :, None].expand(customers.size(0), -1, cust_emb.size(-1))
-        idx_exp_c = idx[None, :, None].expand(customers.size(0), -1, 2)
+        idx_exp_f = idx[None, :, None].expand(customers.size(0), -1, customers.size(-1))
 
         reduced_emb = cust_emb.gather(1, idx_exp_d)
-        reduced_coords = customers[:, :, :2].gather(1, idx_exp_c)
+        reduced_raw = customers.gather(1, idx_exp_f)
         reduced_mask = None
         if mask is not None:
             reduced_mask = mask.gather(1, idx[None, :].expand(mask.size(0), -1))
 
-        reduced_enc = self.cust_encoder(reduced_emb, reduced_mask, coords = reduced_coords)
+        reduced_enc = self.cust_encoder(reduced_emb, reduced_mask, raw_features = reduced_raw)
 
+        reduced_coords = reduced_raw[:, :, :2]
         full_coords = customers[:, :, :2]
         dist = torch.cdist(full_coords, reduced_coords)
         if reduced_mask is not None:
@@ -173,7 +179,7 @@ class EdgeEnhencedLearner(nn.Module):
         if use_bottleneck:
             self.cust_enc = self._encode_customers_bottleneck(cust_emb, customers, mask)
         else:
-            self.cust_enc = self.cust_encoder(cust_emb, mask, coords = customers[:, :, :2]) #.size() = N x L_c x D
+            self.cust_enc = self.cust_encoder(cust_emb, mask, raw_features = customers) #.size() = N x L_c x D
         self.cust_repr = self.dropout(self.cust_project(self.cust_enc)) #.size() = N x L_c x D
         if mask is not None:
             self.cust_repr[mask] = 0
@@ -267,38 +273,51 @@ class EdgeEnhencedLearner(nn.Module):
 
     def _score_customers(self, veh_repr, cust_repr, edge_emb, owner_bias, lookahead, veh_mask = None):
         r"""
-        :param veh_repr: :math:`N \times 1 \times D` tensor containing minibatch of representations for currently acting vehicle
+        :param veh_repr:   :math:`N \times 1 \times D` vehicle representation
+        :param cust_repr:  :math:`N \times L_c \times D` customer representations
+        :param edge_emb:   :math:`N \times 1 \times L_c \times D` edge embeddings
+        :param owner_bias: :math:`N \times 1 \times L_c` ownership log-probabilities
+        :param lookahead:  :math:`N \times 1 \times L_c` lookahead scores
 
-        :return:         :math:`N \times 1 \times L_c` tensor containing minibatch of compatibility scores between currently acting vehicle and each customer
+        :return:           :math:`N \times 1 \times L_c` fused compatibility scores
         """
         start = time.perf_counter()
         att_score = self.cross_fusion(veh_repr, cust_repr, edge_emb)
         
-        # Normalize each score source to a common scale (mean=0, std=1) across candidates
-        # so they contribute "fairly" to the final decision.
+        # Z-normalize each score source for stable expert training
         def z_norm(s):
             mean = s.mean(dim = -1, keepdim = True)
             std = s.std(dim = -1, keepdim = True, unbiased = False).clamp_min(1e-8)
             return torch.nan_to_num((s - mean) / std, nan = 0.0, posinf = 0.0, neginf = 0.0)
 
-        # Concatenate normalized score sources
-        # Shape: (N, 1, L_c, 3)
-        att_norm = z_norm(att_score)
-        owner_norm = z_norm(owner_bias)
-        look_norm = z_norm(lookahead)
-
         combined_scores = torch.stack([
-            att_norm,
-            owner_norm,
-            look_norm
-        ], dim = -1)
+            z_norm(att_score),
+            z_norm(owner_bias),
+            z_norm(lookahead),
+        ], dim = -1)   # (N, 1, L_c, 3)
         
-        compat = self.score_fusion(combined_scores).squeeze(-1)
+        # MoE fusion: experts + context-conditioned gating
+        compat = self.score_fusion(
+            combined_scores, veh_repr, cust_repr, edge_emb
+        )
 
         if self.tanh_xplor is not None:
             compat = self.tanh_xplor * compat.tanh()
         self._forward_profiler.add("score_customers", time.perf_counter() - start)
         return compat
+
+
+    def get_moe_aux_loss(self):
+        """Retrieve the MoE load-balancing auxiliary loss.
+
+        Call after :meth:`step` during training to add to the main REINFORCE
+        loss:  ``total_loss = reinforce_loss + λ · model.get_moe_aux_loss()``
+
+        :return: scalar tensor (0 if not training or no forward yet)
+        """
+        if self.score_fusion._aux_loss is not None:
+            return self.score_fusion._aux_loss
+        return torch.tensor(0.0, device = next(self.parameters()).device)
 
 
     def _get_logp(self, compat : torch.Tensor, veh_mask):

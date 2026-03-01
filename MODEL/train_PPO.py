@@ -15,6 +15,7 @@ from torch.nn.utils import clip_grad_norm_
 
 import time
 import os
+import math
 from itertools import chain
 
 
@@ -29,6 +30,21 @@ def apply_sbg_train_ready_preset(args):
 	args.latent_bottleneck = True
 	args.latent_tokens = 32 if args.latent_tokens <= 1 else args.latent_tokens
 	args.latent_min_nodes = 64 if args.latent_min_nodes <= 0 else args.latent_min_nodes
+
+
+def save_best_val_checkpoint(args, ep, learner, optim, baseline = None, lr_sched = None, best_val_mu = None):
+	checkpoint = {
+			"ep": ep,
+			"best_ep": ep,
+			"best_val_mu": None if best_val_mu is None else float(best_val_mu),
+			"model": learner.state_dict(),
+			"optim": optim.state_dict()
+			}
+	if args.rate_decay is not None:
+		checkpoint["lr_sched"] = lr_sched.state_dict()
+	if args.baseline_type == "critic":
+		checkpoint["critic"] = baseline.state_dict()
+	torch.save(checkpoint, os.path.join(args.output_dir, "chkpt_best.pyth"))
 
 def _compute_step_outputs(learner, baseline, dyna):
 	veh_repr = learner._repr_vehicle(dyna.vehicles, dyna.cur_veh_idx, dyna.mask)
@@ -317,9 +333,7 @@ def val_epoch(args, test_env, learner):
 def main(args):
 	apply_sbg_train_ready_preset(args)
 	dev = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-	torch.backends.cudnn.benchmark = True
-	if args.rng_seed is not None:
-		torch.manual_seed(args.rng_seed)
+	set_random_seed(args.rng_seed, deterministic = True)
 
 	if args.verbose:
 		verbose_print = print
@@ -469,6 +483,22 @@ def main(args):
 	train_stats = []
 	val_stats = []
 	test_stats = []
+	best_val_mu = float("inf")
+	best_ep = -1
+
+	best_ckpt_path = os.path.join(args.output_dir, "chkpt_best.pyth")
+	if os.path.exists(best_ckpt_path):
+		try:
+			best_ckpt = torch.load(best_ckpt_path, map_location = "cpu", weights_only = False)
+			loaded_best = best_ckpt.get("best_val_mu", None)
+			loaded_best_ep = best_ckpt.get("best_ep", None)
+			if loaded_best is not None:
+				best_val_mu = float(loaded_best)
+			if loaded_best_ep is not None:
+				best_ep = int(loaded_best_ep)
+		except Exception:
+			pass
+
 	scaler = GradScaler(enabled = args.amp)
 
 	try:
@@ -478,6 +508,12 @@ def main(args):
 				test_stats.append(test_epoch(args, test_env, learner, ref_costs))
 
 			val_stats.append(val_epoch(args, test_env, learner))
+			cur_val_mu = val_stats[-1][0]
+			if math.isfinite(cur_val_mu) and cur_val_mu < best_val_mu:
+				best_val_mu = float(cur_val_mu)
+				best_ep = ep
+				save_best_val_checkpoint(args, ep, learner, optim, baseline, lr_sched, best_val_mu)
+				verbose_print("[BEST] ep={} val_mu={:.6g} -> chkpt_best.pyth".format(ep + 1, best_val_mu))
 			update_train_test_stats(args, ep, train_stats, val_stats)
 
 			if args.rate_decay is not None:
@@ -498,6 +534,8 @@ def main(args):
 	finally:
 		save_checkpoint(args, ep, learner, optim, baseline, lr_sched)
 		export_train_test_stats(args, start_ep, train_stats, test_stats)
+		if best_ep >= 0:
+			verbose_print("Best validation checkpoint: ep={} val_mu={:.6g}".format(best_ep + 1, best_val_mu))
 
 
 if __name__ == "__main__":

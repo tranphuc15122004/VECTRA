@@ -74,9 +74,7 @@ def print_forward_profiling(learner):
 
 def main(args):
     dev = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    torch.backends.cudnn.benchmark = True
-    if args.rng_seed is not None:
-        torch.manual_seed(args.rng_seed)
+    set_random_seed(args.rng_seed, deterministic = True)
 
     if args.verbose:
         verbose_print = print
@@ -161,7 +159,7 @@ def main(args):
     # MODEL
     verbose_print("Initializing attention model...",
         end = " ", flush = True)
-    """ learner : torch.Module = EdgeEnhencedLearner(
+    learner : torch.Module = EdgeEnhencedLearner(
             Dataset.CUST_FEAT_SIZE,
             Environment.VEH_STATE_SIZE,
             model_size = args.model_size,
@@ -181,10 +179,10 @@ def main(args):
             latent_bottleneck = args.latent_bottleneck,
             latent_tokens = args.latent_tokens,
             latent_min_nodes = args.latent_min_nodes,
-            ) """
+            )
 
 
-    learner : torch.Module = AttentionLearner(
+    """ learner : torch.Module = AttentionLearner(
 		Dataset.CUST_FEAT_SIZE,
         Environment.VEH_STATE_SIZE,
 		128,
@@ -192,7 +190,7 @@ def main(args):
 		8,
 		512,
 		args.tanh_xplor,
-	)
+	) """
     learner.to(dev)
     verbose_print("Done.")
 
@@ -239,9 +237,11 @@ def main(args):
 
     verbose_print("Running...")
 
-    learner.reset_forward_profiling()
+    if hasattr(learner, "reset_forward_profiling"):
+        learner.reset_forward_profiling()
     val_epoch(args , test_env , learner)
-    print_forward_profiling(learner)
+    if hasattr(learner, "get_forward_profiling_summary"):
+        print_forward_profiling(learner)
 
 
 if __name__ == "__main__":

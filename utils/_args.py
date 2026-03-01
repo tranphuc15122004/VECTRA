@@ -5,7 +5,7 @@ import json
 CONFIG_FILE = None
 VERBOSE = True
 NO_CUDA = False
-SEED = None
+SEED = 1
 
 PROBLEM = "vrp"
 CUST_COUNT = 10

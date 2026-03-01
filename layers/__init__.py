@@ -10,4 +10,10 @@ from .Mymodel_layers import (
 	OwnershipHead,
 	LookaheadHead,
 	EdgeFeatureEncoder,
+	VECTRAGraphEncoder,
+	VECTRAPairwiseFeatures,
+	NodeStructuralEncoding,
+	DisentangledRelationBias,
+	VECTRAGraphEncoderLayer,
+	AdaptiveExpertScoreFusion,
 )

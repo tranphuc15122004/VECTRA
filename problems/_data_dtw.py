@@ -1,9 +1,55 @@
 from problems import VRPTW_Dataset
 import torch
+import csv
 
 # giống với SDCVRPTW dataset
 class DVRPTW_Dataset(VRPTW_Dataset):
     CUST_FEAT_SIZE = 7
+
+    @classmethod
+    def nodes_from_csv(cls, csv_path, device = None, dtype = torch.float):
+        required_cols = ("x", "y", "demand", "open", "close", "servicetime")
+        optional_cols = ("time",)
+
+        rows = []
+        with open(csv_path, "r", newline = "") as f:
+            reader = csv.DictReader(f)
+            if reader.fieldnames is None:
+                raise ValueError("CSV has no header")
+
+            missing = [c for c in required_cols if c not in reader.fieldnames]
+            if missing:
+                raise ValueError("Missing required CSV columns: {}".format(", ".join(missing)))
+
+            for i, row in enumerate(reader):
+                try:
+                    x = float(row["x"])
+                    y = float(row["y"])
+                    dem = float(row["demand"])
+                    tw_open = float(row["open"])
+                    tw_close = float(row["close"])
+                    svc = float(row["servicetime"])
+                    apr = float(row["time"]) if "time" in reader.fieldnames else 0.0
+                except (TypeError, ValueError) as e:
+                    raise ValueError("Invalid numeric value at CSV row {}: {}".format(i + 2, e))
+
+                rows.append((x, y, dem, tw_open, tw_close, svc, apr))
+
+        if len(rows) == 0:
+            raise ValueError("CSV has no data rows")
+
+        nodes = torch.tensor(rows, dtype = dtype, device = device).unsqueeze(0)
+        if nodes.size(-1) != cls.CUST_FEAT_SIZE:
+            raise ValueError("Expected {} node features, got {}".format(
+                cls.CUST_FEAT_SIZE, nodes.size(-1)))
+        return nodes
+
+    @classmethod
+    def from_csv(cls, csv_path, veh_count, veh_capa, veh_speed, cust_mask = None, device = None, dtype = torch.float):
+        nodes = cls.nodes_from_csv(csv_path, device = device, dtype = dtype)
+        if cust_mask is not None:
+            cust_mask = cust_mask.to(device = nodes.device)
+        return cls(veh_count, veh_capa, veh_speed, nodes, cust_mask)
 
     @classmethod
     def generate(cls,
