@@ -1,13 +1,11 @@
 from layers import (
     GraphEncoder,
-    VECTRAGraphEncoder,
     FleetEncoder,
     CrossEdgeFusion,
     CoordinationMemory,
     OwnershipHead,
     LookaheadHead,
     EdgeFeatureEncoder,
-    AdaptiveExpertScoreFusion,
 )
 import torch
 import torch.nn as nn
@@ -36,7 +34,7 @@ class ForwardProfiler:
         ]
         return summary, total
 
-class EdgeEnhencedLearner(nn.Module):
+class VECTRA(nn.Module):
     def __init__(self, cust_feat_size, veh_state_size, model_size = 128,
             layer_count = 3, head_count = 8, ff_size = 512, tanh_xplor = 10, greedy = False,
             edge_feat_size = 8, cust_k = None, memory_size = None, lookahead_hidden = 128 , dropout = 0.1,
@@ -58,17 +56,7 @@ class EdgeEnhencedLearner(nn.Module):
 
         self.depot_embedding = nn.Linear(cust_feat_size, model_size)
         self.cust_embedding  = nn.Linear(cust_feat_size, model_size)
-        self.cust_encoder    = VECTRAGraphEncoder(
-            layer_count,
-            head_count,
-            model_size,
-            ff_size,
-            adaptive_depth = adaptive_depth,
-            min_layers = adaptive_min_layers,
-            easy_ratio = adaptive_easy_ratio,
-        )
-        
-        """ self.cust_encoder    = GraphEncoder(
+        self.cust_encoder    = GraphEncoder(
             layer_count,
             head_count,
             model_size,
@@ -77,7 +65,7 @@ class EdgeEnhencedLearner(nn.Module):
             adaptive_depth = adaptive_depth,
             min_layers = adaptive_min_layers,
             easy_ratio = adaptive_easy_ratio,
-        ) """
+        )
 
         self.fleet_encoder   = FleetEncoder(
             layer_count,
@@ -98,8 +86,8 @@ class EdgeEnhencedLearner(nn.Module):
         self.cust_project    = nn.Linear(model_size, model_size)
         self.veh_project     = nn.Linear(model_size, model_size)
 
-        # Lightweight score fusion: z-normalised (att, owner, look) → 64 → 1
-        # Input shape: (N, 1, L_c, 3); Linear broadcasts over last dim.
+        # Advanced score fusion MLP to capture complex interactions between 
+        # attention, vehicle-customer ownership/coordination, and lookahead scores.
         self.score_fusion = nn.Sequential(
             nn.Linear(3, 64),
             nn.ReLU(),
@@ -137,17 +125,16 @@ class EdgeEnhencedLearner(nn.Module):
     def _encode_customers_bottleneck(self, cust_emb, customers, mask):
         idx = self._build_bottleneck_indices(customers.size(1), self.latent_tokens, customers.device)
         idx_exp_d = idx[None, :, None].expand(customers.size(0), -1, cust_emb.size(-1))
-        idx_exp_f = idx[None, :, None].expand(customers.size(0), -1, customers.size(-1))
+        idx_exp_c = idx[None, :, None].expand(customers.size(0), -1, 2)
 
         reduced_emb = cust_emb.gather(1, idx_exp_d)
-        reduced_raw = customers.gather(1, idx_exp_f)
+        reduced_coords = customers[:, :, :2].gather(1, idx_exp_c)
         reduced_mask = None
         if mask is not None:
             reduced_mask = mask.gather(1, idx[None, :].expand(mask.size(0), -1))
 
-        reduced_enc = self.cust_encoder(reduced_emb, reduced_mask, raw_features = reduced_raw)
+        reduced_enc = self.cust_encoder(reduced_emb, reduced_mask, coords = reduced_coords)
 
-        reduced_coords = reduced_raw[:, :, :2]
         full_coords = customers[:, :, :2]
         dist = torch.cdist(full_coords, reduced_coords)
         if reduced_mask is not None:
@@ -186,7 +173,7 @@ class EdgeEnhencedLearner(nn.Module):
         if use_bottleneck:
             self.cust_enc = self._encode_customers_bottleneck(cust_emb, customers, mask)
         else:
-            self.cust_enc = self.cust_encoder(cust_emb, mask, raw_features = customers) #.size() = N x L_c x D
+            self.cust_enc = self.cust_encoder(cust_emb, mask, coords = customers[:, :, :2]) #.size() = N x L_c x D
         self.cust_repr = self.dropout(self.cust_project(self.cust_enc)) #.size() = N x L_c x D
         if mask is not None:
             self.cust_repr[mask] = 0
@@ -312,14 +299,6 @@ class EdgeEnhencedLearner(nn.Module):
             compat = self.tanh_xplor * compat.tanh()
         self._forward_profiler.add("score_customers", time.perf_counter() - start)
         return compat
-
-
-    def get_moe_aux_loss(self):
-        """No-op: lightweight MLP fusion has no aux loss.
-
-        :return: zero scalar tensor (API-compatible with MoE variant)
-        """
-        return torch.tensor(0.0, device = next(self.parameters()).device)
 
 
     def _get_logp(self, compat : torch.Tensor, veh_mask):

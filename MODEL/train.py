@@ -1,6 +1,6 @@
 from _learner import AttentionLearner
 from MODEL.model import EdgeEnhencedLearner
-from MODEL.model import *
+from MODEL.model import VECTRA
 from problems import *
 from baselines import *
 from externals import *
@@ -34,11 +34,11 @@ def apply_sbg_train_ready_preset(args):
     if getattr(args, 'baseline_type', 'none') == 'critic' and not getattr(args, 'adv_norm', False):
         args.adv_norm = True
 
-    args.adaptive_depth = True
+    args.adaptive_depth = False
     args.adaptive_min_layers = max(1, args.adaptive_min_layers)
     args.adaptive_easy_ratio = 0.7 if args.adaptive_easy_ratio == 0.6 else args.adaptive_easy_ratio
 
-    args.latent_bottleneck = True
+    args.latent_bottleneck = False
     args.latent_tokens = 32 if args.latent_tokens <= 1 else args.latent_tokens
     args.latent_min_nodes = 64 if args.latent_min_nodes <= 0 else args.latent_min_nodes
 
@@ -89,10 +89,6 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
                     adv_norm = getattr(args, 'adv_norm', False),
                     entropy_coef = getattr(args, 'entropy_coef', 0.0),
                 )
-                # MoE load-balancing auxiliary loss
-                moe_coef = getattr(args, 'moe_aux_coef', 0.01)
-                if moe_coef > 0 and hasattr(bl_wrapped_learner.learner, 'get_moe_aux_loss'):
-                    loss = loss + moe_coef * bl_wrapped_learner.learner.get_moe_aux_loss()
 
             if not torch.isfinite(loss):
                 optim.zero_grad(set_to_none = True)
@@ -280,7 +276,7 @@ def main(args):
     # MODEL
     verbose_print("Initializing attention model...",
         end = " ", flush = True)
-    learner : torch.Module = EdgeEnhencedLearner(
+    learner : torch.Module = VECTRA(
             Dataset.CUST_FEAT_SIZE,
             Environment.VEH_STATE_SIZE,
             model_size = args.model_size,

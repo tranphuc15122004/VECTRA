@@ -1,4 +1,5 @@
 from MODEL.model import EdgeEnhencedLearner
+from MODEL.model import vectra
 from problems import *
 from baselines import *
 from externals import *
