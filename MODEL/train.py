@@ -201,16 +201,16 @@ def main(args):
     if args.problem_type == "sdvrptw" or  args.problem_type == "dvrptw":
         gen_params.extend( [args.deg_of_dyna, args.appear_early_ratio] )
 
-    # TRAIN DATA
-    verbose_print("Generating {} {} samples of training data...".format(
-        args.iter_count * args.batch_size, args.problem_type.upper()),
-        end = " ", flush = True)
-    train_data = Dataset.generate(
-            args.iter_count * args.batch_size,
-            *gen_params
-            )
-    train_data.normalize()
-    verbose_print("Done.")
+    # TRAIN DATA — generated fresh each epoch (online generation)
+    # This gives the model effectively infinite unique instances → better generalization.
+    # The first epoch's data is generated here; subsequent epochs regenerate inside the loop.
+    def generate_train_data():
+        data = Dataset.generate(args.iter_count * args.batch_size, *gen_params)
+        data.normalize()
+        return data
+    train_data = generate_train_data()
+    verbose_print("Training data: {} {} samples (regenerated each epoch)".format(
+        args.iter_count * args.batch_size, args.problem_type.upper()))
 
     # TEST DATA AND COST REFERENCE
     verbose_print("Generating {} {} samples of test data...".format(
@@ -369,6 +369,8 @@ def main(args):
     scaler = GradScaler(enabled = args.amp)  # wrapper above passes device_type automatically
     try:
         for ep in range(start_ep, args.epoch_count):
+            if ep > start_ep:  # first epoch already generated above
+                train_data = generate_train_data()
             train_stats.append( train_epoch(args, train_data, Environment, env_params, baseline, optim, dev, ep, scaler) )
             if ref_routes is not None:
                 test_stats.append( test_epoch(args, test_env, learner, ref_costs) )

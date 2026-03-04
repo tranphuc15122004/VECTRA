@@ -248,7 +248,7 @@ class VECTRA(nn.Module):
         else:
             cust_idx = logp.exp().multinomial(1)
         self._update_memory(dyna.cur_veh_idx, cust_idx, veh_repr, edge_emb)
-        return cust_idx, logp.gather(1, cust_idx)
+        return cust_idx, logp.gather(1, cust_idx), veh_repr
 
 
     def _update_memory(self, veh_idx, cust_idx, veh_repr, edge_emb):
@@ -269,7 +269,7 @@ class VECTRA(nn.Module):
         while not dyna.done:
             if dyna.new_customers:
                 self._encode_customers(dyna.nodes, dyna.cust_mask)
-            cust_idx, logp = self.step(dyna)
+            cust_idx, logp, _ = self.step(dyna)
             actions.append( (dyna.cur_veh_idx, cust_idx) )
             logps.append( logp )
             rewards.append( dyna.step(cust_idx) )

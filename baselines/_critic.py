@@ -56,11 +56,12 @@ class CriticBaseline(Baseline):
         :param veh_repr:   (N, 1, model_size) – current vehicle encoding
         :return:           (N, 1) value estimate
         """
-        # Global customer context: mean over the customer dimension
-        cust_context = self.learner.cust_repr.mean(dim = 1, keepdim = True)  # (N, 1, D)
-        state = torch.cat([veh_repr, cust_context], dim = -1)                # (N, 1, 2D)
-        val = self.project(state)                                             # (N, 1, 1)
-        return val.squeeze(-1)                                                # (N, 1)
+        # Detach actor tensors: critic value loss must not flow gradients
+        # back through the actor's computation graph (they are separate networks).
+        cust_context = self.learner.cust_repr.detach().mean(dim = 1, keepdim = True)  # (N, 1, D)
+        state = torch.cat([veh_repr.detach(), cust_context], dim = -1)                 # (N, 1, 2D)
+        val = self.project(state)                                                       # (N, 1, 1)
+        return val.squeeze(-1)                                                          # (N, 1)
 
     def _eval_step_legacy(self, vrp_dynamics, learner_compat, cust_idx):
         """Original logit-based value estimate (fallback for old learners)."""
@@ -71,13 +72,16 @@ class CriticBaseline(Baseline):
             val = val.gather(2, cust_idx.unsqueeze(1).expand(-1, 1, -1))
         return val.squeeze(1)
 
-    def eval_step(self, vrp_dynamics, learner_compat, cust_idx):
+    def eval_step(self, vrp_dynamics, learner_compat, cust_idx, veh_repr = None):
         if self.use_state_critic:
-            veh_repr = self.learner._repr_vehicle(
-                vrp_dynamics.vehicles,
-                vrp_dynamics.cur_veh_idx,
-                vrp_dynamics.mask,
-            )
+            # Reuse veh_repr already computed in __call__ loop — avoids a
+            # second FleetEncoder forward pass per step.
+            if veh_repr is None:
+                veh_repr = self.learner._repr_vehicle(
+                    vrp_dynamics.vehicles,
+                    vrp_dynamics.cur_veh_idx,
+                    vrp_dynamics.mask,
+                )
             return self._eval_step_state(veh_repr)
         return self._eval_step_legacy(vrp_dynamics, learner_compat, cust_idx)
 
@@ -85,8 +89,6 @@ class CriticBaseline(Baseline):
 
     def __call__(self, vrp_dynamics):
         vrp_dynamics.reset()
-        cust_mask = getattr(vrp_dynamics, "cust_mask", None)
-        self.learner._encode_customers(vrp_dynamics.nodes, cust_mask)
         if hasattr(vrp_dynamics, "veh_speed"):
             self.learner.veh_speed = vrp_dynamics.veh_speed
         if hasattr(self.learner, "_reset_memory"):
@@ -95,51 +97,18 @@ class CriticBaseline(Baseline):
         while not vrp_dynamics.done:
             if vrp_dynamics.new_customers:
                 self.learner._encode_customers(vrp_dynamics.nodes, getattr(vrp_dynamics, 'cust_mask', None))
-            veh_repr = self.learner._repr_vehicle(
-                    vrp_dynamics.vehicles,
-                    vrp_dynamics.cur_veh_idx,
-                    vrp_dynamics.mask)
-            if hasattr(self.learner, "edge_encoder") and hasattr(self.learner, "owner_head"):
-                edge_feat = self.learner._build_edge_features(
-                    vrp_dynamics.vehicles,
-                    vrp_dynamics.nodes,
-                    vrp_dynamics.cur_veh_idx,
-                    vrp_dynamics.cur_veh_mask)
-                edge_emb = self.learner.edge_encoder(edge_feat)
-
-                owner_logits = self.learner.owner_head(self.learner._veh_memory, self.learner.cust_repr)
-                owner_prob = owner_logits.softmax(dim = 1)
-                owner_bias = owner_prob.gather(
-                    1,
-                    vrp_dynamics.cur_veh_idx[:, :, None].expand(-1, -1, owner_prob.size(-1))
-                )
-                owner_bias = owner_bias.clamp_min(1e-9).log()
-
-                lookahead = self.learner.lookahead_head(veh_repr, self.learner.cust_repr, edge_emb)
-                compat = self.learner._score_customers(
-                    veh_repr,
-                    self.learner.cust_repr,
-                    edge_emb,
-                    owner_bias,
-                    lookahead)
-            else:
-                compat = self.learner._score_customers(veh_repr)
-            logp = self.learner._get_logp(compat, vrp_dynamics.cur_veh_mask)
-            cust_idx = logp.exp().multinomial(1)
+            cust_idx, logp, veh_repr = self.learner.step(vrp_dynamics)
 
             # Critic value estimate
             if not(self.use_cumul and bl_vals):
                 if self.use_state_critic:
                     bl_vals.append( self._eval_step_state(veh_repr) )
                 else:
-                    bl_vals.append( self._eval_step_legacy(vrp_dynamics, compat, cust_idx) )
+                    bl_vals.append( self._eval_step_legacy(vrp_dynamics, None, cust_idx) )
 
-            if hasattr(self.learner, "_update_memory") and "edge_emb" in locals():
-                self.learner._update_memory(vrp_dynamics.cur_veh_idx, cust_idx, veh_repr, edge_emb)
             actions.append( (vrp_dynamics.cur_veh_idx, cust_idx) )
-            logps.append( logp.gather(1, cust_idx) )
-            r = vrp_dynamics.step(cust_idx)
-            rewards.append(r)
+            logps.append( logp )
+            rewards.append( vrp_dynamics.step(cust_idx) )
         if self.use_cumul:
             rewards = torch.stack(rewards).sum(dim = 0)
             bl_vals = bl_vals[0]
