@@ -9,9 +9,9 @@ CUSTOMERS=${CUSTOMERS:-50}
 VEHICLES=${VEHICLES:-3}
 
 # ── Training schedule ─────────────────────────────────────────────────────────
-EPOCHS=${EPOCHS:-300}
-ITERS=${ITERS:-1000}
-BATCH=${BATCH:-1024}
+EPOCHS=${EPOCHS:-5}
+ITERS=${ITERS:-50}
+BATCH=${BATCH:-124}
 TEST_BATCH=${TEST_BATCH:-512}
 LR=${LR:-1e-4}
 

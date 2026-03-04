@@ -369,8 +369,6 @@ def main(args):
     scaler = GradScaler(enabled = args.amp)  # wrapper above passes device_type automatically
     try:
         for ep in range(start_ep, args.epoch_count):
-            if ep > start_ep:  # first epoch already generated above
-                train_data = generate_train_data()
             train_stats.append( train_epoch(args, train_data, Environment, env_params, baseline, optim, dev, ep, scaler) )
             if ref_routes is not None:
                 test_stats.append( test_epoch(args, test_env, learner, ref_costs) )
