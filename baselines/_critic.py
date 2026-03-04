@@ -93,6 +93,8 @@ class CriticBaseline(Baseline):
             self.learner._reset_memory(vrp_dynamics)
         actions, logps, rewards, bl_vals = [], [], [], []
         while not vrp_dynamics.done:
+            if vrp_dynamics.new_customers:
+                self.learner._encode_customers(vrp_dynamics.nodes, getattr(vrp_dynamics, 'cust_mask', None))
             veh_repr = self.learner._repr_vehicle(
                     vrp_dynamics.vehicles,
                     vrp_dynamics.cur_veh_idx,
@@ -119,8 +121,7 @@ class CriticBaseline(Baseline):
                     self.learner.cust_repr,
                     edge_emb,
                     owner_bias,
-                    lookahead,
-                    vrp_dynamics.cur_veh_mask)   # pass mask for correct MoE router context
+                    lookahead)
             else:
                 compat = self.learner._score_customers(veh_repr)
             logp = self.learner._get_logp(compat, vrp_dynamics.cur_veh_mask)

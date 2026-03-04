@@ -1,6 +1,5 @@
 from _learner import AttentionLearner
-from MODEL.model import EdgeEnhencedLearner
-from MODEL.model import VECTRA
+from MODEL.model import *
 from problems import *
 from baselines import *
 from externals import *
@@ -24,23 +23,6 @@ import time
 import os
 import math
 from itertools import chain
-
-
-def apply_sbg_train_ready_preset(args):
-    if not getattr(args, "sbg_train_ready", False):
-        return
-
-    # When using actor-critic, advantage normalization helps stability significantly
-    if getattr(args, 'baseline_type', 'none') == 'critic' and not getattr(args, 'adv_norm', False):
-        args.adv_norm = True
-
-    args.adaptive_depth = False
-    args.adaptive_min_layers = max(1, args.adaptive_min_layers)
-    args.adaptive_easy_ratio = 0.7 if args.adaptive_easy_ratio == 0.6 else args.adaptive_easy_ratio
-
-    args.latent_bottleneck = False
-    args.latent_tokens = 32 if args.latent_tokens <= 1 else args.latent_tokens
-    args.latent_min_nodes = 64 if args.latent_min_nodes <= 0 else args.latent_min_nodes
 
 
 def save_best_val_checkpoint(args, ep, learner, optim, baseline = None, lr_sched = None, best_val_mu = None):
@@ -189,7 +171,6 @@ def val_epoch(args, test_env, learner):
     return mean.item(), std.item()
 
 def main(args):
-    apply_sbg_train_ready_preset(args)
     dev = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     set_random_seed(args.rng_seed, deterministic = True)
 
@@ -279,23 +260,16 @@ def main(args):
     learner : torch.Module = VECTRA(
             Dataset.CUST_FEAT_SIZE,
             Environment.VEH_STATE_SIZE,
-            model_size = args.model_size,
-            layer_count = args.layer_count,
-            head_count = args.head_count,
-            ff_size = args.ff_size,
-            tanh_xplor = args.tanh_xplor,
-            greedy = False,
-            edge_feat_size = args.edge_feat_size,
-            cust_k = args.cust_k,
-            memory_size = args.memory_size,
-            lookahead_hidden = args.lookahead_hidden,
-            dropout = args.dropout,
-            adaptive_depth = args.adaptive_depth,
-            adaptive_min_layers = args.adaptive_min_layers,
-            adaptive_easy_ratio = args.adaptive_easy_ratio,
-            latent_bottleneck = args.latent_bottleneck,
-            latent_tokens = args.latent_tokens,
-            latent_min_nodes = args.latent_min_nodes,
+            args.model_size,
+            args.layer_count,
+            args.head_count,
+            args.ff_size,
+            args.tanh_xplor,
+            False,
+            args.edge_feat_size,
+            args.cust_k,
+            args.memory_size,
+            args.lookahead_hidden
             )
     learner.to(dev)
     verbose_print("Done.")

@@ -10,7 +10,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
 	sys.path.insert(0, PROJECT_ROOT)
 
-from MODEL.model import EdgeEnhencedLearner
+from MODEL.model import EdgeEnhencedLearner , VECTRA
 from problems import (
 	DVRPTW_Dataset,
 	DVRPTW_Environment,
@@ -149,7 +149,7 @@ def _build_env_params(args):
 
 
 def _init_model(args, dataset_cls, env_cls, device):
-	learner = EdgeEnhencedLearner(
+	learner = VECTRA(
 		dataset_cls.CUST_FEAT_SIZE,
 		env_cls.VEH_STATE_SIZE,
 		model_size = args.model_size,
