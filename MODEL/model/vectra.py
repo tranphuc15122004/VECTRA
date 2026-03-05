@@ -9,7 +9,6 @@ from layers import (
 )
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from collections import defaultdict
 import time
 
@@ -38,7 +37,9 @@ class ForwardProfiler:
 class VECTRA(nn.Module):
     def __init__(self, cust_feat_size, veh_state_size, model_size = 128,
             layer_count = 3, head_count = 8, ff_size = 512, tanh_xplor = 10, greedy = False,
-            edge_feat_size = 8, cust_k = None, memory_size = None, lookahead_hidden = 128 , dropout = 0.1):
+            edge_feat_size = 8, cust_k = None, memory_size = None, lookahead_hidden = 128 , dropout = 0.1,
+            adaptive_depth = False, adaptive_min_layers = 1, adaptive_easy_ratio = 0.6,
+            latent_bottleneck = False, latent_tokens = 32, latent_min_nodes = 64):
         r"""
         :param model_size:  Dimension :math:`D` shared by all intermediate layers
         :param layer_count: Number of layers in customers' (graph) Transformer Encoder
@@ -55,9 +56,26 @@ class VECTRA(nn.Module):
 
         self.depot_embedding = nn.Linear(cust_feat_size, model_size)
         self.cust_embedding  = nn.Linear(cust_feat_size, model_size)
-        self.cust_encoder    = GraphEncoder(layer_count, head_count, model_size, ff_size, k = cust_k)
+        self.cust_encoder    = GraphEncoder(
+            layer_count,
+            head_count,
+            model_size,
+            ff_size,
+            k = cust_k,
+            adaptive_depth = adaptive_depth,
+            min_layers = adaptive_min_layers,
+            easy_ratio = adaptive_easy_ratio,
+        )
 
-        self.fleet_encoder   = FleetEncoder(layer_count, head_count, model_size, ff_size)
+        self.fleet_encoder   = FleetEncoder(
+            layer_count,
+            head_count,
+            model_size,
+            ff_size,
+            adaptive_depth = adaptive_depth,
+            min_layers = adaptive_min_layers,
+            easy_ratio = adaptive_easy_ratio,
+        )
         self.edge_encoder    = EdgeFeatureEncoder(edge_feat_size, model_size)
         self.cross_fusion    = CrossEdgeFusion(head_count, model_size)
 
@@ -78,7 +96,58 @@ class VECTRA(nn.Module):
 
         self.dropout         = nn.Dropout(dropout)
         self.greedy = greedy
+        self.adaptive_depth = adaptive_depth
+        self.adaptive_min_layers = adaptive_min_layers
+        self.adaptive_easy_ratio = adaptive_easy_ratio
+        self.latent_bottleneck = latent_bottleneck
+        self.latent_tokens = latent_tokens
+        self.latent_min_nodes = latent_min_nodes
         self._forward_profiler = ForwardProfiler()
+
+
+    def _build_bottleneck_indices(self, length, max_tokens, device):
+        tokens = max(2, min(max_tokens, length))
+        if tokens >= length:
+            return torch.arange(length, device = device)
+        idx = torch.linspace(1, length - 1, steps = tokens - 1, device = device)
+        idx = idx.round().long().unique(sorted = True)
+        if idx.numel() < tokens - 1:
+            pad = torch.arange(1, length, device = device)
+            mask = torch.ones_like(pad, dtype = torch.bool)
+            mask[idx.clamp(max = length - 1)] = False
+            extra = pad[mask][: (tokens - 1 - idx.numel())]
+            idx = torch.cat((idx, extra), dim = 0)
+            idx = idx.sort().values
+        idx = idx[:tokens - 1]
+        return torch.cat((torch.zeros(1, device = device, dtype = torch.long), idx), dim = 0)
+
+
+    def _encode_customers_bottleneck(self, cust_emb, customers, mask):
+        idx = self._build_bottleneck_indices(customers.size(1), self.latent_tokens, customers.device)
+        idx_exp_d = idx[None, :, None].expand(customers.size(0), -1, cust_emb.size(-1))
+        idx_exp_c = idx[None, :, None].expand(customers.size(0), -1, 2)
+
+        reduced_emb = cust_emb.gather(1, idx_exp_d)
+        reduced_coords = customers[:, :, :2].gather(1, idx_exp_c)
+        reduced_mask = None
+        if mask is not None:
+            reduced_mask = mask.gather(1, idx[None, :].expand(mask.size(0), -1))
+
+        reduced_enc = self.cust_encoder(reduced_emb, reduced_mask, coords = reduced_coords)
+
+        full_coords = customers[:, :, :2]
+        dist = torch.cdist(full_coords, reduced_coords)
+        if reduced_mask is not None:
+            dist = dist.masked_fill(reduced_mask[:, None, :], 1e9)
+            all_masked = reduced_mask.all(dim = 1)
+            if all_masked.any():
+                dist = dist.clone()
+                dist[all_masked, :, 0] = 0.0
+        nearest = dist.argmin(dim = -1)
+        full_enc = reduced_enc.gather(1, nearest[:, :, None].expand(-1, -1, reduced_enc.size(-1)))
+        if mask is not None:
+            full_enc = full_enc.masked_fill(mask.unsqueeze(-1), 0.0)
+        return full_enc
 
 
     def _encode_customers(self, customers, mask = None):
@@ -94,7 +163,17 @@ class VECTRA(nn.Module):
             ), dim = 1) #.size() = N x L_c x D
         if mask is not None:
             cust_emb[mask] = 0
-        self.cust_enc = self.cust_encoder(cust_emb, mask, coords = customers[:, :, :2]) #.size() = N x L_c x D
+        use_bottleneck = (
+            self.latent_bottleneck
+            and self.latent_tokens is not None
+            and self.latent_tokens > 1
+            and self.latent_tokens < customers.size(1)
+            and customers.size(1) >= self.latent_min_nodes
+        )
+        if use_bottleneck:
+            self.cust_enc = self._encode_customers_bottleneck(cust_emb, customers, mask)
+        else:
+            self.cust_enc = self.cust_encoder(cust_emb, mask, coords = customers[:, :, :2]) #.size() = N x L_c x D
         self.cust_repr = self.dropout(self.cust_project(self.cust_enc)) #.size() = N x L_c x D
         if mask is not None:
             self.cust_repr[mask] = 0
@@ -104,6 +183,19 @@ class VECTRA(nn.Module):
     def _encode_fleet(self, vehicles, cust_repr, mask = None):
         fleet_enc = self.fleet_encoder(vehicles, cust_repr, mask = mask)
         return self.veh_project(fleet_enc)
+
+
+    def _build_fleet_edges(self, vehicles):
+        start = time.perf_counter()
+        pos = vehicles[:, :, :2]
+        time_feat = vehicles[:, :, 3:4]
+        capa = vehicles[:, :, 2:3]
+        dist = torch.cdist(pos, pos)
+        time_gap = (time_feat - time_feat.transpose(1, 2)).abs()
+        capa_gap = (capa - capa.transpose(1, 2)).abs()
+        edge = torch.stack((dist, time_gap.squeeze(-1), capa_gap.squeeze(-1)), dim = -1)
+        self._forward_profiler.add("build_fleet_edges", time.perf_counter() - start)
+        return edge
 
 
     def _build_edge_features(self, vehicles, customers, veh_idx, veh_mask = None):
@@ -157,19 +249,23 @@ class VECTRA(nn.Module):
         r"""
         :param vehicles: :math:`N \times L_v \times D_v` tensor containing minibatch of vehicles' states
         :param veh_idx:  :math:`N \times 1` tensor containing minibatch of indices corresponding to currently acting vehicle
-        :param mask:     :math:`N \times L_v \times L_c` tensor containing minibatch of masks
+        :param mask:     :math:`N \times 1 \times L_c` tensor containing minibatch of masks
                 where :math:`m_{nij} = 1` if vehicle :math:`i` cannot serve customer :math:`j` in sample :math:`n`, 0 otherwise
 
         :return:         :math:`N \times 1 \times D` tensor containing minibatch of representations for currently acting vehicle
         """
         start = time.perf_counter()
-        fleet_repr = self._encode_fleet(vehicles, self.cust_repr, mask = mask) #.size() = N x L_v x D
-        veh_query = fleet_repr.gather(1, veh_idx.unsqueeze(2).expand(-1, -1, self.model_size)) #.size() = N x 1 x D
+        veh_state = vehicles.gather(1, veh_idx[:, :, None].expand(-1, -1, vehicles.size(-1))) #.size() = N x 1 x D_v
+        if mask is not None and mask.dim() == 3 and mask.size(1) != 1:
+            veh_mask = mask.gather(1, veh_idx[:, :, None].expand(-1, -1, mask.size(-1)))
+        else:
+            veh_mask = mask
+        veh_query = self._encode_fleet(veh_state, self.cust_repr, mask = veh_mask) #.size() = N x 1 x D
         self._forward_profiler.add("represent_vehicle", time.perf_counter() - start)
         return veh_query
 
 
-    def _score_customers(self, veh_repr, cust_repr, edge_emb, owner_bias, lookahead):
+    def _score_customers(self, veh_repr, cust_repr, edge_emb, owner_bias, lookahead, veh_mask = None):
         r"""
         :param veh_repr: :math:`N \times 1 \times D` tensor containing minibatch of representations for currently acting vehicle
 
@@ -181,20 +277,24 @@ class VECTRA(nn.Module):
         # Normalize each score source to a common scale (mean=0, std=1) across candidates
         # so they contribute "fairly" to the final decision.
         def z_norm(s):
-            mean = s.mean(dim = -1, keepdim = True)
-            std = s.std(dim = -1, keepdim = True, unbiased = False).clamp_min(1e-8)
-            return torch.nan_to_num((s - mean) / std, nan = 0.0, posinf = 0.0, neginf = 0.0)
+            return (s - s.mean(dim = -1, keepdim = True)) / (s.std(dim = -1, keepdim = True) + 1e-8)
 
         # Concatenate normalized score sources
         # Shape: (N, 1, L_c, 3)
+        att_norm = z_norm(att_score)
+        owner_norm = z_norm(owner_bias)
+        look_norm = z_norm(lookahead)
+
         combined_scores = torch.stack([
-            z_norm(att_score),
-            z_norm(owner_bias),
-            z_norm(lookahead)
+            att_norm,
+            owner_norm,
+            look_norm
         ], dim = -1)
         
         # Non-linear fusion using the score_fusion MLP
-        compat = self.score_fusion(combined_scores).squeeze(-1)
+        compat_base = self.score_fusion(combined_scores).squeeze(-1)
+
+        compat = compat_base
 
         if self.tanh_xplor is not None:
             compat = self.tanh_xplor * compat.tanh()
@@ -226,7 +326,7 @@ class VECTRA(nn.Module):
 
     def step(self, dyna):
         
-        veh_repr = self._repr_vehicle(dyna.vehicles, dyna.cur_veh_idx, dyna.mask)
+        veh_repr = self._repr_vehicle(dyna.vehicles, dyna.cur_veh_idx, dyna.cur_veh_mask)
         
         edge_feat = self._build_edge_features(dyna.vehicles, dyna.nodes, dyna.cur_veh_idx, dyna.cur_veh_mask)
         edge_emb = self.edge_encoder(edge_feat)
@@ -238,17 +338,31 @@ class VECTRA(nn.Module):
         owner_bias = owner_bias.clamp_min(1e-9).log()
         self._forward_profiler.add("ownership_head", time.perf_counter() - owner_start)
 
+        cand_mask = dyna.cur_veh_mask
+        cust_repr_scored = self.cust_repr
+        edge_emb_scored = edge_emb
+        owner_bias_scored = owner_bias
+
         lookahead_start = time.perf_counter()
-        lookahead = self.lookahead_head(veh_repr, self.cust_repr, edge_emb)
+        lookahead = self.lookahead_head(veh_repr, cust_repr_scored, edge_emb_scored)
         self._forward_profiler.add("lookahead_head", time.perf_counter() - lookahead_start)
-        compat : torch.Tensor = self._score_customers(veh_repr, self.cust_repr, edge_emb, owner_bias, lookahead)
-        logp = self._get_logp(compat, dyna.cur_veh_mask)
+        compat : torch.Tensor = self._score_customers(
+            veh_repr,
+            cust_repr_scored,
+            edge_emb_scored,
+            owner_bias_scored,
+            lookahead,
+            cand_mask,
+        )
+        logp_local = self._get_logp(compat, cand_mask)
+
+        logp = logp_local
         if self.greedy:
             cust_idx = logp.argmax(dim = 1, keepdim = True)
         else:
             cust_idx = logp.exp().multinomial(1)
         self._update_memory(dyna.cur_veh_idx, cust_idx, veh_repr, edge_emb)
-        return cust_idx, logp.gather(1, cust_idx), veh_repr
+        return cust_idx, logp.gather(1, cust_idx)
 
 
     def _update_memory(self, veh_idx, cust_idx, veh_repr, edge_emb):
@@ -269,7 +383,7 @@ class VECTRA(nn.Module):
         while not dyna.done:
             if dyna.new_customers:
                 self._encode_customers(dyna.nodes, dyna.cust_mask)
-            cust_idx, logp, _ = self.step(dyna)
+            cust_idx, logp = self.step(dyna)
             actions.append( (dyna.cur_veh_idx, cust_idx) )
             logps.append( logp )
             rewards.append( dyna.step(cust_idx) )

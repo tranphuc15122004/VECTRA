@@ -1,4 +1,3 @@
-from _learner import AttentionLearner
 from MODEL.model import *
 from problems import *
 from baselines import *
@@ -66,15 +65,7 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
             grad_norm = 0.0
             with autocast(_AMP_DEVICE, enabled = args.amp):
                 actions, logps, rewards, bl_vals = bl_wrapped_learner(dyna)
-                loss = reinforce_loss(
-                    logps, rewards, bl_vals,
-                    adv_norm = getattr(args, 'adv_norm', False),
-                    entropy_coef = getattr(args, 'entropy_coef', 0.0),
-                )
-
-            if not torch.isfinite(loss):
-                optim.zero_grad(set_to_none = True)
-                continue
+                loss = reinforce_loss(logps, rewards, bl_vals)
 
             prob = torch.stack(logps).sum(0).exp().mean()
             if isinstance(rewards, torch.Tensor):
@@ -125,9 +116,7 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
             ep_prob += prob.item()
             ep_val += val.item()
             ep_bl += bl.item()
-            grad_norm_val = grad_norm.item() if torch.is_tensor(grad_norm) else float(grad_norm)
-            if math.isfinite(grad_norm_val):
-                ep_norm += grad_norm_val
+            ep_norm += grad_norm
 
     return tuple(stat / args.iter_count for stat in (ep_loss, ep_prob, ep_val, ep_bl, ep_norm))
 
@@ -172,7 +161,9 @@ def val_epoch(args, test_env, learner):
 
 def main(args):
     dev = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    set_random_seed(args.rng_seed, deterministic = True)
+    torch.backends.cudnn.benchmark = True
+    if args.rng_seed is not None:
+        torch.manual_seed(args.rng_seed)
 
     if args.verbose:
         verbose_print = print
@@ -201,16 +192,16 @@ def main(args):
     if args.problem_type == "sdvrptw" or  args.problem_type == "dvrptw":
         gen_params.extend( [args.deg_of_dyna, args.appear_early_ratio] )
 
-    # TRAIN DATA — generated fresh each epoch (online generation)
-    # This gives the model effectively infinite unique instances → better generalization.
-    # The first epoch's data is generated here; subsequent epochs regenerate inside the loop.
-    def generate_train_data():
-        data = Dataset.generate(args.iter_count * args.batch_size, *gen_params)
-        data.normalize()
-        return data
-    train_data = generate_train_data()
-    verbose_print("Training data: {} {} samples (regenerated each epoch)".format(
-        args.iter_count * args.batch_size, args.problem_type.upper()))
+    # TRAIN DATA
+    verbose_print("Generating {} {} samples of training data...".format(
+        args.iter_count * args.batch_size, args.problem_type.upper()),
+        end = " ", flush = True)
+    train_data = Dataset.generate(
+            args.iter_count * args.batch_size,
+            *gen_params
+            )
+    train_data.normalize()
+    verbose_print("Done.")
 
     # TEST DATA AND COST REFERENCE
     verbose_print("Generating {} {} samples of test data...".format(
@@ -260,16 +251,23 @@ def main(args):
     learner : torch.Module = VECTRA(
             Dataset.CUST_FEAT_SIZE,
             Environment.VEH_STATE_SIZE,
-            args.model_size,
-            args.layer_count,
-            args.head_count,
-            args.ff_size,
-            args.tanh_xplor,
-            False,
-            args.edge_feat_size,
-            args.cust_k,
-            args.memory_size,
-            args.lookahead_hidden
+            model_size = args.model_size,
+            layer_count = args.layer_count,
+            head_count = args.head_count,
+            ff_size = args.ff_size,
+            tanh_xplor = args.tanh_xplor,
+            greedy = False,
+            edge_feat_size = args.edge_feat_size,
+            cust_k = args.cust_k,
+            memory_size = args.memory_size,
+            lookahead_hidden = args.lookahead_hidden,
+            dropout = args.dropout,
+            adaptive_depth = args.adaptive_depth,
+            adaptive_min_layers = args.adaptive_min_layers,
+            adaptive_easy_ratio = args.adaptive_easy_ratio,
+            latent_bottleneck = args.latent_bottleneck,
+            latent_tokens = args.latent_tokens,
+            latent_min_nodes = args.latent_min_nodes,
             )
     learner.to(dev)
     verbose_print("Done.")
@@ -288,11 +286,6 @@ def main(args):
         baseline = RolloutBaseline(learner, args.rollout_count, args.rollout_threshold)
     elif args.baseline_type == "critic":
         baseline = CriticBaseline(learner, args.customers_count, args.critic_use_qval, args.loss_use_cumul)
-        # For actor-critic, advantage normalisation is strongly recommended to
-        # reduce gradient variance and speed up convergence.
-        if not getattr(args, 'adv_norm', False):
-            args.adv_norm = True
-            verbose_print("  [AC] Auto-enabled --adv-norm for critic baseline.")
     baseline.to(dev)
     verbose_print("Done.")
 

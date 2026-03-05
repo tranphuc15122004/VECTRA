@@ -125,7 +125,7 @@ def main():
         except AssertionError as exc:
             print(f"[FAIL] {test.__name__}: {exc}")
             sys.exit(1)
-    print("All SBG layer tests passed.")
+    print("All layer tests passed.")
 
 
 if __name__ == "__main__":

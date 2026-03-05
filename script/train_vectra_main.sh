@@ -5,15 +5,15 @@ PYTHON_BIN=${PYTHON_BIN:-/home/phuc/miniconda3/envs/kaggle/bin/python}
 
 # ── Problem ───────────────────────────────────────────────────────────────────
 PROBLEM_TYPE=${PROBLEM_TYPE:-dvrptw}
-CUSTOMERS=${CUSTOMERS:-20}
+CUSTOMERS=${CUSTOMERS:-50}
 VEHICLES=${VEHICLES:-3}
 
 # ── Training schedule ─────────────────────────────────────────────────────────
-EPOCHS=${EPOCHS:-5}
-ITERS=${ITERS:-50}
-BATCH=${BATCH:-124}
+EPOCHS=${EPOCHS:-300}
+ITERS=${ITERS:-500}
+BATCH=${BATCH:-1024}
 TEST_BATCH=${TEST_BATCH:-512}
-LR=${LR:-1e-4}
+LR=${LR:-5e-5}
 
 # ── Model architecture (matching old training command) ────────────────────────
 MODEL_SIZE=${MODEL_SIZE:-128}
@@ -27,9 +27,10 @@ LOOKAHEAD_HIDDEN=${LOOKAHEAD_HIDDEN:-128}
 DROPOUT=${DROPOUT:-0.1}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0}
 
+
 # ── Checkpoint / output ───────────────────────────────────────────────────────
 # Set RESUME to a checkpoint path to continue training, e.g.:
-#   RESUME=output/DVRPTWn50m3_xxx/chkpt_ep100.pyth ./script/train_sbg_ready.sh
+#   RESUME=output/DVRPTWn50m3_xxx/chkpt_ep100.pyth ./script/train_vectra_main.sh
 # NOTE: do NOT resume from an n100m5 checkpoint — model dimensions are incompatible.
 RESUME=${RESUME:-}
 
@@ -62,5 +63,4 @@ PYTHONPATH=. "$PYTHON_BIN" MODEL/train.py \
   --amp \
   --num-workers       4 \
   --pin-memory \
-  --sbg-train-ready \
   "${RESUME_ARG[@]}"

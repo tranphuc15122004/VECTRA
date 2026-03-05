@@ -57,9 +57,8 @@ def save_checkpoint_in_train(args, ep, learner, optim, baseline = None, lr_sched
 def load_checkpoint(args, learner, optim, baseline = None, lr_sched = None):
     checkpoint = torch.load(args.resume_state, map_location='cpu', weights_only=False)
 
-    # Try strict first; fall back to non-strict so that models with new MoE
-    # modules can resume from pre-MoE checkpoints (missing keys initialised
-    # from scratch) and vice-versa (unexpected keys are safely ignored).
+    # Try strict first; fall back to non-strict so checkpoints from nearby
+    # architecture variants can still be resumed safely.
     try:
         learner.load_state_dict(checkpoint["model"], strict=True)
     except RuntimeError as e:
@@ -93,7 +92,7 @@ def load_model_weights(args, learner, strict=False):
         args.model_weight: path to checkpoint or state_dict
         learner: nn.Module (updated in-place)
         strict: whether to require exact key match (default False — safe for
-                cross-version loads where MoE keys may be absent/extra)
+            cross-version loads with minor key differences)
     """
     path = getattr(args, "model_weight", None)
     if not path:

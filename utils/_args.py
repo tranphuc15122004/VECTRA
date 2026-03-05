@@ -41,13 +41,12 @@ CUST_K = None
 MEMORY_SIZE = None
 LOOKAHEAD_HIDDEN = 128
 MODEL_DROPOUT = 0.1
-ADAPTIVE_DEPTH = False
+ADAPTIVE_DEPTH = True
 ADAPTIVE_MIN_LAYERS = 1
 ADAPTIVE_EASY_RATIO = 0.6
-LATENT_BOTTLENECK = False
+LATENT_BOTTLENECK = True
 LATENT_TOKENS = 32
 LATENT_MIN_NODES = 64
-SBG_TRAIN_READY = False
 
 EPOCH_COUNT = 20
 ITER_COUNT = 1000
@@ -145,7 +144,6 @@ def parse_args(argv = None):
     group.add_argument("--latent-bottleneck", action = "store_true", default = LATENT_BOTTLENECK)
     group.add_argument("--latent-tokens", type = int, default = LATENT_TOKENS)
     group.add_argument("--latent-min-nodes", type = int, default = LATENT_MIN_NODES)
-    group.add_argument("--sbg-train-ready", action = "store_true", default = SBG_TRAIN_READY)
 
     group = parser.add_argument_group("Training parameters")
     group.add_argument("--epoch-count", "-e", type = int, default = EPOCH_COUNT)

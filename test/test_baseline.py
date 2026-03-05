@@ -5,7 +5,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from MODEL.model import EdgeEnhencedLearner
+from MODEL.model import VECTRA
 from problems import VRP_Dataset, VRP_Environment
 from baselines import *
 from layers import reinforce_loss
@@ -14,7 +14,7 @@ data = VRP_Dataset.generate(6, 10, 2)
 dyna = VRP_Environment(data)
 dyna.reset()
 
-learner = EdgeEnhencedLearner(data.CUST_FEAT_SIZE, dyna.VEH_STATE_SIZE, tanh_xplor = 10)
+learner = VECTRA(data.CUST_FEAT_SIZE, dyna.VEH_STATE_SIZE, tanh_xplor = 10)
 
 bl = NearestNeighbourBaseline(learner)
 

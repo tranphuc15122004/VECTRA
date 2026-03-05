@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 
 from ._mha import _MHA_V2
 
@@ -91,12 +90,30 @@ class GraphEncoderLayer(nn.Module):
 
 
 class GraphEncoder(nn.Module):
-	def __init__(self, layer_count, head_count, model_size, ff_size, k = None):
+	def __init__(self, layer_count, head_count, model_size, ff_size, k = None,
+			adaptive_depth = False, min_layers = 1, easy_ratio = 0.6):
 		super().__init__()
 		self.k = k
+		self.adaptive_depth = adaptive_depth
+		self.min_layers = max(1, min_layers)
+		self.easy_ratio = easy_ratio
 		self.layers = nn.ModuleList([
 			GraphEncoderLayer(head_count, model_size, ff_size) for _ in range(layer_count)
 		])
+
+	def _resolve_layer_count(self, mask, total_layers):
+		if (not self.adaptive_depth) or total_layers <= 1:
+			return total_layers
+		min_layers = min(self.min_layers, total_layers)
+		if mask is None:
+			return total_layers
+		visible_ratio = 1.0 - mask.float().mean().item()
+		if visible_ratio >= self.easy_ratio:
+			return min_layers
+		span = total_layers - min_layers
+		hardness = (self.easy_ratio - visible_ratio) / max(self.easy_ratio, 1e-6)
+		hardness = max(0.0, min(1.0, hardness))
+		return min_layers + int(round(span * hardness))
 
 	def forward(self, inputs, mask = None, cost_mat = None, coords = None):
 		"""
@@ -123,7 +140,8 @@ class GraphEncoder(nn.Module):
 			query_mask = mask[:, :, None].expand(-1, -1, cost_mat.size(2))
 			attn_mask = query_mask if attn_mask is None else (attn_mask | query_mask)
 		h = inputs
-		for layer in self.layers:
+		use_layers = self._resolve_layer_count(mask, len(self.layers))
+		for layer in self.layers[:use_layers]:
 			h = layer(h, cost_mat, attn_mask if attn_mask is not None else mask)
 		return h
 
@@ -153,12 +171,35 @@ class FleetEncoderLayer(nn.Module):
 
 
 class FleetEncoder(nn.Module):
-	def __init__(self, layer_count, head_count, model_size, ff_size):
+	def __init__(self, layer_count, head_count, model_size, ff_size,
+			adaptive_depth = False, min_layers = 1, easy_ratio = 0.6):
 		super().__init__()
 		self.input_proj = nn.LazyLinear(model_size)
+		self.adaptive_depth = adaptive_depth
+		self.min_layers = max(1, min_layers)
+		self.easy_ratio = easy_ratio
 		self.layers = nn.ModuleList([
 			FleetEncoderLayer(head_count, model_size, ff_size) for _ in range(layer_count)
 		])
+
+	def _resolve_layer_count(self, mask, total_layers):
+		if (not self.adaptive_depth) or total_layers <= 1:
+			return total_layers
+		min_layers = min(self.min_layers, total_layers)
+		if mask is None:
+			return total_layers
+		if mask.dim() == 3:
+			feasible_ratio = (~mask).float().mean().item()
+		elif mask.dim() == 2:
+			feasible_ratio = (~mask).float().mean().item()
+		else:
+			return total_layers
+		if feasible_ratio >= self.easy_ratio:
+			return min_layers
+		span = total_layers - min_layers
+		hardness = (self.easy_ratio - feasible_ratio) / max(self.easy_ratio, 1e-6)
+		hardness = max(0.0, min(1.0, hardness))
+		return min_layers + int(round(span * hardness))
 
 	def forward(self, vehicles, cust_repr, mask = None):
 		"""
@@ -168,7 +209,8 @@ class FleetEncoder(nn.Module):
 		:return:            N x L_v x D
 		"""
 		h = self.input_proj(vehicles)
-		for layer in self.layers:
+		use_layers = self._resolve_layer_count(mask, len(self.layers))
+		for layer in self.layers[:use_layers]:
 			h = layer(h, cust_repr, mask)
 		return h
 

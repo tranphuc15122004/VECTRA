@@ -7,7 +7,7 @@ import torch
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from _learner import AttentionLearner
-from MODEL.model import EdgeEnhencedLearner
+from MODEL.model import VECTRA
 from utils import parse_args
 from problems import VRP_Dataset, VRP_Environment
 
@@ -32,7 +32,7 @@ def main():
 		args.tanh_xplor,
 	)
 
-	marl = EdgeEnhencedLearner(
+	marl = VECTRA(
             data.CUST_FEAT_SIZE,
 		dyna.VEH_STATE_SIZE,
 		model_size = args.model_size,
@@ -57,7 +57,7 @@ def main():
 		_ = marl(dyna)
 
 	print("AttentionLearner params:", _count_params(attn))
-	print("EdgeEnhencedLearner params:", _count_params(marl))
+	print("VECTRA params:", _count_params(marl))
 
 
 if __name__ == "__main__":

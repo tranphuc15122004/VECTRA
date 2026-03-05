@@ -39,17 +39,12 @@ MEMORY_SIZE=${MEMORY_SIZE:-128}
 LOOKAHEAD_HIDDEN=${LOOKAHEAD_HIDDEN:-128}
 DROPOUT=${DROPOUT:-0.1}
 
-# ── Learnable MoE ─────────────────────────────────────────────────────────────
-# --sbg-train-ready enables SBG + adaptive-k + MoE + latent bottleneck + adaptive depth.
-# Tune the load-balance coefficient to control expert diversity.
-MOE_LB_COEF=${MOE_LB_COEF:-0.01}
-
 # ── Checkpoint / output ───────────────────────────────────────────────────────
 OUTDIR=${OUTDIR:-output/ppo_n${CUSTOMERS}m${VEHICLES}}
 # Resume from a PPO checkpoint (model dimensions must match):
 #   RESUME=output/ppo_n50m3/chkpt_ep100.pyth ./script/train_ppo.sh
 # Warm-start from a REINFORCE checkpoint (same arch, skips critic state):
-#   MODEL_WEIGHT=output/sbg_ready_n50m3/chkpt_ep300.pyth ./script/train_ppo.sh
+#   MODEL_WEIGHT=output/DVRPTWn50m3_xxx/chkpt_ep300.pyth ./script/train_ppo.sh
 RESUME=${RESUME:-}
 MODEL_WEIGHT=${MODEL_WEIGHT:-}
 
@@ -104,8 +99,6 @@ PYTHONPATH=. "$PYTHON_BIN" MODEL/train_PPO.py \
   --amp \
   --num-workers       4 \
   --pin-memory \
-  --sbg-train-ready \
-  --sbg-moe-load-balance-coef "$MOE_LB_COEF" \
   --output-dir        "$OUTDIR" \
   "${ADV_NORM_ARG[@]}" \
   "${PPO_TARGET_KL_ARG[@]}" \

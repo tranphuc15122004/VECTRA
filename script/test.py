@@ -1,5 +1,4 @@
 from _learner import AttentionLearner
-from MODEL.model import EdgeEnhencedLearner
 from MODEL.model import *
 from problems import *
 from baselines import *
@@ -159,7 +158,7 @@ def main(args):
     # MODEL
     verbose_print("Initializing attention model...",
         end = " ", flush = True)
-    learner : torch.Module = EdgeEnhencedLearner(
+    learner : torch.Module = VECTRA(
             Dataset.CUST_FEAT_SIZE,
             Environment.VEH_STATE_SIZE,
             model_size = args.model_size,
@@ -199,7 +198,7 @@ def main(args):
         dyna_warmup = Environment(train_data, train_data.nodes[:1].to(dev), None, *env_params)
         _ = learner(dyna_warmup)
     
-    print("EdgeEnhencedLearner params:", _count_params(learner))
+    print("VECTRA params:", _count_params(learner))
 
     # BASELINE
     verbose_print("Initializing '{}' baseline...".format(

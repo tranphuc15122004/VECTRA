@@ -1,5 +1,4 @@
-from MODEL.model import EdgeEnhencedLearner
-from MODEL.model import vectra
+from MODEL.model import VECTRA
 from problems import *
 from baselines import *
 from externals import *
@@ -18,19 +17,6 @@ import time
 import os
 import math
 from itertools import chain
-
-
-def apply_sbg_train_ready_preset(args):
-	if not getattr(args, "sbg_train_ready", False):
-		return
-
-	args.adaptive_depth = True
-	args.adaptive_min_layers = max(1, args.adaptive_min_layers)
-	args.adaptive_easy_ratio = 0.7 if args.adaptive_easy_ratio == 0.6 else args.adaptive_easy_ratio
-
-	args.latent_bottleneck = True
-	args.latent_tokens = 32 if args.latent_tokens <= 1 else args.latent_tokens
-	args.latent_min_nodes = 64 if args.latent_min_nodes <= 0 else args.latent_min_nodes
 
 
 def save_best_val_checkpoint(args, ep, learner, optim, baseline = None, lr_sched = None, best_val_mu = None):
@@ -332,7 +318,6 @@ def val_epoch(args, test_env, learner):
 
 
 def main(args):
-	apply_sbg_train_ready_preset(args)
 	dev = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
 	set_random_seed(args.rng_seed, deterministic = True)
 
@@ -413,7 +398,7 @@ def main(args):
 		test_env.init_cust_mask = test_env.init_cust_mask.to(dev)
 
 	verbose_print("Initializing attention model...", end = " ", flush = True)
-	learner = EdgeEnhencedLearner(
+	learner = VECTRA(
 		Dataset.CUST_FEAT_SIZE,
 		Environment.VEH_STATE_SIZE,
 		model_size = args.model_size,
