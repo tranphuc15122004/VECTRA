@@ -24,6 +24,80 @@ import math
 from itertools import chain
 
 
+def _is_cuda_device_assert_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        "device-side assert triggered" in msg
+        or "cuda error" in msg and "assert" in msg
+    )
+
+
+def _is_finite_scalar(value) -> bool:
+    if isinstance(value, torch.Tensor):
+        return bool(torch.isfinite(value).all().item())
+    return math.isfinite(float(value))
+
+
+def _detach_loss_components(components):
+    detached = {}
+    for key in ("policy_loss", "critic_loss", "entropy_loss"):
+        value = components.get(key, 0.0)
+        if isinstance(value, torch.Tensor):
+            detached[key] = value.detach()
+        else:
+            detached[key] = value
+    return detached
+
+
+def _format_train_postfix(loss, prob, val, bl, grad_norm, processed_batches, skipped_nonfinite, skip_reason = None):
+    base = "l={:.4g} p={:9.4g} val={:6.4g} bl={:6.4g} |g|={:.4g}".format(
+        loss,
+        prob,
+        val,
+        bl,
+        grad_norm,
+    )
+    if skip_reason is None and skipped_nonfinite == 0:
+        return base
+    total_batches = processed_batches + skipped_nonfinite
+    suffix = " skip={}: {}/{}".format(
+        skip_reason if skip_reason is not None else "total",
+        skipped_nonfinite,
+        total_batches,
+    )
+    return base + suffix
+
+
+def _compute_train_batch_stats(args, data, Environment, env_params, bl_wrapped_learner, custs, mask):
+    dyna = Environment(data, custs, mask, *env_params)
+    actions, logps, rewards, bl_vals = bl_wrapped_learner(dyna)
+    loss, loss_components = reinforce_loss(
+        logps,
+        rewards,
+        bl_vals,
+        adv_norm = args.adv_norm,
+        entropy_coef = args.entropy_coef,
+        return_components = True,
+    )
+
+    prob = torch.stack(logps).sum(0).exp().mean()
+    if isinstance(rewards, torch.Tensor):
+        val = rewards.mean()
+    else:
+        val = torch.stack(rewards).sum(0).mean()
+
+    if bl_vals is None:
+        bl = loss.detach().new_zeros(())
+    elif isinstance(bl_vals, torch.Tensor):
+        bl = bl_vals.mean()
+    elif len(bl_vals) == 0 or bl_vals[0] is None:
+        bl = loss.detach().new_zeros(())
+    else:
+        bl = bl_vals[0].mean()
+
+    return loss, prob, val, bl, _detach_loss_components(loss_components)
+
+
 def save_best_val_checkpoint(args, ep, learner, optim, baseline = None, lr_sched = None, best_val_mu = None):
     checkpoint = {
             "ep": ep,
@@ -54,6 +128,12 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
     ep_val = 0
     ep_bl = 0
     ep_norm = 0
+    ep_policy_loss = 0
+    ep_critic_loss = 0
+    ep_entropy_loss = 0
+    processed_batches = 0
+    skipped_nonfinite = 0
+    amp_fallbacks = 0
     with tqdm(loader, desc = "Ep.#{: >3d}/{: <3d}".format(ep+1, args.epoch_count)) as progress:
         for minibatch in progress:
             if data.cust_mask is None:
@@ -61,29 +141,50 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
             else:
                 custs, mask = minibatch[0].to(device), minibatch[1].to(device)
 
-            dyna = Environment(data, custs, mask, *env_params)
             grad_norm = 0.0
-            with autocast(_AMP_DEVICE, enabled = args.amp):
-                actions, logps, rewards, bl_vals = bl_wrapped_learner(dyna)
-                loss = reinforce_loss(logps, rewards, bl_vals)
+            used_amp = args.amp
+            with autocast(_AMP_DEVICE, enabled = used_amp):
+                loss, prob, val, bl, loss_components = _compute_train_batch_stats(
+                    args,
+                    data,
+                    Environment,
+                    env_params,
+                    bl_wrapped_learner,
+                    custs,
+                    mask,
+                )
 
-            prob = torch.stack(logps).sum(0).exp().mean()
-            if isinstance(rewards, torch.Tensor):
-                val = rewards.mean()
-            else:
-                val = torch.stack(rewards).sum(0).mean()
-
-            if bl_vals is None:
-                bl = loss.detach().new_zeros(())
-            elif isinstance(bl_vals, torch.Tensor):
-                bl = bl_vals.mean()
-            elif len(bl_vals) == 0 or bl_vals[0] is None:
-                bl = loss.detach().new_zeros(())
-            else:
-                bl = bl_vals[0].mean()
+            if not all(_is_finite_scalar(stat) for stat in (loss, prob, val, bl)):
+                optim.zero_grad(set_to_none = True)
+                if used_amp:
+                    with autocast(_AMP_DEVICE, enabled = False):
+                        loss, prob, val, bl, loss_components = _compute_train_batch_stats(
+                            args,
+                            data,
+                            Environment,
+                            env_params,
+                            bl_wrapped_learner,
+                            custs,
+                            mask,
+                        )
+                    used_amp = False
+                    amp_fallbacks += 1
+                if not all(_is_finite_scalar(stat) for stat in (loss, prob, val, bl)):
+                    skipped_nonfinite += 1
+                    progress.set_postfix_str(_format_train_postfix(
+                        loss,
+                        prob,
+                        val,
+                        bl,
+                        grad_norm,
+                        processed_batches,
+                        skipped_nonfinite,
+                        "nonfinite-forward",
+                    ))
+                    continue
 
             optim.zero_grad()
-            if args.amp:
+            if used_amp:
                 scaler.scale(loss).backward()
                 if args.max_grad_norm is not None:
                     scaler.unscale_(optim)
@@ -94,6 +195,70 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
                     if not torch.isfinite(grad_norm):
                         optim.zero_grad(set_to_none = True)
                         scaler.update()
+                        with autocast(_AMP_DEVICE, enabled = False):
+                            loss, prob, val, bl, loss_components = _compute_train_batch_stats(
+                                args,
+                                data,
+                                Environment,
+                                env_params,
+                                bl_wrapped_learner,
+                                custs,
+                                mask,
+                            )
+                        amp_fallbacks += 1
+                        if not all(_is_finite_scalar(stat) for stat in (loss, prob, val, bl)):
+                            skipped_nonfinite += 1
+                            progress.set_postfix_str(_format_train_postfix(
+                                loss,
+                                prob,
+                                val,
+                                bl,
+                                grad_norm,
+                                processed_batches,
+                                skipped_nonfinite,
+                                "nonfinite-forward",
+                            ))
+                            continue
+                        loss.backward()
+                        if args.max_grad_norm is not None:
+                            grad_norm = clip_grad_norm_(
+                                chain.from_iterable(grp["params"] for grp in optim.param_groups),
+                                args.max_grad_norm,
+                            )
+                            if not torch.isfinite(grad_norm):
+                                optim.zero_grad(set_to_none = True)
+                                skipped_nonfinite += 1
+                                progress.set_postfix_str(_format_train_postfix(
+                                    loss,
+                                    prob,
+                                    val,
+                                    bl,
+                                    grad_norm,
+                                    processed_batches,
+                                    skipped_nonfinite,
+                                    "nonfinite-grad",
+                                ))
+                                continue
+                        optim.step()
+                        used_amp = False
+                        processed_batches += 1
+                        progress.set_postfix_str(_format_train_postfix(
+                            loss,
+                            prob,
+                            val,
+                            bl,
+                            grad_norm,
+                            processed_batches,
+                            skipped_nonfinite,
+                        ))
+                        ep_loss += loss.item()
+                        ep_prob += prob.item()
+                        ep_val += val.item()
+                        ep_bl += bl.item()
+                        ep_norm += float(grad_norm)
+                        ep_policy_loss += float(loss_components["policy_loss"])
+                        ep_critic_loss += float(loss_components["critic_loss"])
+                        ep_entropy_loss += float(loss_components["entropy_loss"])
                         continue
                 scaler.step(optim)
                 scaler.update()
@@ -106,19 +271,62 @@ def train_epoch(args, data, Environment : VRP_Environment, env_params, bl_wrappe
                     )
                     if not torch.isfinite(grad_norm):
                         optim.zero_grad(set_to_none = True)
+                        skipped_nonfinite += 1
+                        progress.set_postfix_str(_format_train_postfix(
+                            loss,
+                            prob,
+                            val,
+                            bl,
+                            grad_norm,
+                            processed_batches,
+                            skipped_nonfinite,
+                            "nonfinite-grad",
+                        ))
                         continue
                 optim.step()
 
-            progress.set_postfix_str("l={:.4g} p={:9.4g} val={:6.4g} bl={:6.4g} |g|={:.4g}".format(
-                loss, prob, val, bl, grad_norm))
+            processed_batches += 1
+            progress.set_postfix_str(_format_train_postfix(
+                loss,
+                prob,
+                val,
+                bl,
+                grad_norm,
+                processed_batches,
+                skipped_nonfinite,
+            ))
 
             ep_loss += loss.item()
             ep_prob += prob.item()
             ep_val += val.item()
             ep_bl += bl.item()
-            ep_norm += grad_norm
+            ep_norm += float(grad_norm)
+            ep_policy_loss += float(loss_components["policy_loss"])
+            ep_critic_loss += float(loss_components["critic_loss"])
+            ep_entropy_loss += float(loss_components["entropy_loss"])
 
-    return tuple(stat / args.iter_count for stat in (ep_loss, ep_prob, ep_val, ep_bl, ep_norm))
+    if skipped_nonfinite > 0:
+        print("[warn] epoch {} skipped {}/{} minibatches due to non-finite training stats/gradients (amp_fallbacks={})".format(
+            ep + 1,
+            skipped_nonfinite,
+            processed_batches + skipped_nonfinite,
+            amp_fallbacks,
+        ))
+
+    if processed_batches == 0:
+        print("[error] epoch {} had no successful optimizer steps; returning NaN train metrics instead of misleading zeros.".format(ep + 1))
+        return (float("nan"),) * 8
+
+    return tuple(stat / processed_batches for stat in (
+        ep_loss,
+        ep_prob,
+        ep_val,
+        ep_bl,
+        ep_norm,
+        ep_policy_loss,
+        ep_critic_loss,
+        ep_entropy_loss,
+    ))
 
 
 def test_epoch(args, test_env, learner, ref_costs):
@@ -286,6 +494,8 @@ def main(args):
         baseline = RolloutBaseline(learner, args.rollout_count, args.rollout_threshold)
     elif args.baseline_type == "critic":
         baseline = CriticBaseline(learner, args.customers_count, args.critic_use_qval, args.loss_use_cumul)
+        if not args.adv_norm:
+            print("[warn] baseline=critic but --adv-norm is disabled; training variance can be high.")
     baseline.to(dev)
     verbose_print("Done.")
 
@@ -295,8 +505,8 @@ def main(args):
     lr_sched = None
     if args.baseline_type == "critic":
         optim = Adam([
-            {"params": learner.parameters(), "lr": args.learning_rate},
-            {"params": baseline.parameters(), "lr": args.critic_rate}
+            {"params": learner.parameters(), "lr": args.learning_rate, "weight_decay": args.weight_decay},
+            {"params": baseline.parameters(), "lr": args.critic_rate, "weight_decay": args.weight_decay}
             ])
         if args.rate_decay is not None:
             critic_decay = args.rate_decay if args.critic_decay is None else args.critic_decay
@@ -312,7 +522,7 @@ def main(args):
                 lambda ep: critic_decay**ep
                 ])
     else:
-        optim = Adam(learner.parameters(), args.learning_rate)
+        optim = Adam(learner.parameters(), args.learning_rate, weight_decay = args.weight_decay)
         if args.rate_decay is not None:
             lr_sched = LambdaLR(optim, lambda ep: args.rate_decay**ep)
     verbose_print("Done.")
@@ -360,6 +570,7 @@ def main(args):
             pass
 
     scaler = GradScaler(enabled = args.amp)  # wrapper above passes device_type automatically
+    ep = start_ep - 1
     try:
         for ep in range(start_ep, args.epoch_count):
             train_stats.append( train_epoch(args, train_data, Environment, env_params, baseline, optim, dev, ep, scaler) )
@@ -388,11 +599,37 @@ def main(args):
                 save_checkpoint(args, ep, learner, optim, baseline, lr_sched)
 
     except KeyboardInterrupt:
-        save_checkpoint(args, ep, learner, optim, baseline, lr_sched)
+        try:
+            save_checkpoint(args, ep, learner, optim, baseline, lr_sched)
+        except Exception as e:
+            print("[warn] Skip checkpoint after interrupt due to save error: {}".format(e))
         export_train_test_stats(args, start_ep, train_stats, test_stats)
+    except Exception as e:
+        if _is_cuda_device_assert_error(e):
+            print("[error] CUDA device-side assert detected. Skipping checkpoint save because CUDA context is invalid.")
+        else:
+            raise
         
     finally:
-        save_checkpoint(args, ep, learner, optim, baseline, lr_sched)
+        if torch.cuda.is_available() and torch.cuda.is_initialized():
+            try:
+                torch.cuda.synchronize()
+            except Exception as e:
+                if _is_cuda_device_assert_error(e):
+                    print("[warn] Skipping final checkpoint save due to prior CUDA device-side assert.")
+                    export_train_test_stats(args, start_ep, train_stats, test_stats)
+                    if best_ep >= 0:
+                        verbose_print("Best validation checkpoint: ep={} val_mu={:.6g}".format(best_ep + 1, best_val_mu))
+                    return
+                print("[warn] CUDA sync failed before final save: {}".format(e))
+
+        try:
+            save_checkpoint(args, ep, learner, optim, baseline, lr_sched)
+        except Exception as e:
+            if _is_cuda_device_assert_error(e):
+                print("[warn] Final checkpoint skipped due to CUDA device-side assert.")
+            else:
+                print("[warn] Final checkpoint save failed: {}".format(e))
         export_train_test_stats(args, start_ep, train_stats, test_stats)
         if best_ep >= 0:
             verbose_print("Best validation checkpoint: ep={} val_mu={:.6g}".format(best_ep + 1, best_val_mu))

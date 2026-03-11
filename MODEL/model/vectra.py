@@ -276,14 +276,35 @@ class VECTRA(nn.Module):
         
         # Normalize each score source to a common scale (mean=0, std=1) across candidates
         # so they contribute "fairly" to the final decision.
-        def z_norm(s):
-            return (s - s.mean(dim = -1, keepdim = True)) / (s.std(dim = -1, keepdim = True) + 1e-8)
+        def z_norm(s, mask = None):
+            if mask is None:
+                centered = s - s.mean(dim = -1, keepdim = True)
+                var = centered.pow(2).mean(dim = -1, keepdim = True)
+                scale = var.clamp_min(1e-8).sqrt()
+                return centered / scale
+
+            valid = (~mask).to(s.dtype)
+            valid_count = valid.sum(dim = -1, keepdim = True).clamp_min(1.0)
+            mean = (s * valid).sum(dim = -1, keepdim = True) / valid_count
+            centered = (s - mean) * valid
+            var = centered.pow(2).sum(dim = -1, keepdim = True) / valid_count
+            scale = var.clamp_min(1e-8).sqrt()
+            normed = centered / scale
+            return normed.masked_fill(mask, 0.0)
+
+        score_mask = veh_mask
+        if score_mask is not None:
+            score_mask = score_mask.clone()
+            all_masked = score_mask.all(dim = 2, keepdim = True)
+            if all_masked.any():
+                all_masked_rows = all_masked.squeeze(2).squeeze(1)
+                score_mask[all_masked_rows, 0, 0] = False
 
         # Concatenate normalized score sources
         # Shape: (N, 1, L_c, 3)
-        att_norm = z_norm(att_score)
-        owner_norm = z_norm(owner_bias)
-        look_norm = z_norm(lookahead)
+        att_norm = z_norm(att_score, score_mask)
+        owner_norm = z_norm(owner_bias, score_mask)
+        look_norm = z_norm(lookahead, score_mask)
 
         combined_scores = torch.stack([
             att_norm,
@@ -293,6 +314,8 @@ class VECTRA(nn.Module):
         
         # Non-linear fusion using the score_fusion MLP
         compat_base = self.score_fusion(combined_scores).squeeze(-1)
+        if score_mask is not None:
+            compat_base = compat_base.masked_fill(score_mask, 0.0)
 
         compat = compat_base
 

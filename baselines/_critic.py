@@ -18,11 +18,13 @@ class CriticBaseline(Baseline):
         )
 
     def eval_step(self, vrp_dynamics, learner_compat, cust_idx):
-        compat = learner_compat.clone()
+        compat = learner_compat.detach().clone()
         compat[vrp_dynamics.cur_veh_mask] = 0
         val = self.project(compat)
         if self.use_qval:
-            val = val.gather(2, cust_idx.unsqueeze(1).expand(-1,1,-1))
+            # Guard against rare invalid sampled indices on GPU to avoid device-side asserts.
+            safe_idx = cust_idx.clamp_(0, val.size(2) - 1)
+            val = val.gather(2, safe_idx.unsqueeze(1).expand(-1,1,-1))
         return val.squeeze(1)
 
     def __call__(self, vrp_dynamics):
@@ -66,7 +68,24 @@ class CriticBaseline(Baseline):
             else:
                 compat = self.learner._score_customers(veh_repr)
             logp = self.learner._get_logp(compat, vrp_dynamics.cur_veh_mask)
-            cust_idx = logp.exp().multinomial(1)
+            probs = logp.exp()
+            bad = (~torch.isfinite(probs)).any(dim = 1, keepdim = True) | (probs.sum(dim = 1, keepdim = True) <= 0)
+            if bad.any():
+                safe = torch.zeros_like(probs)
+                safe[:, 0] = 1.0
+                probs = torch.where(bad, safe, probs)
+            cust_idx = probs.multinomial(1)
+            # Keep actions in valid domain for all downstream gather/scatter calls.
+            if cust_idx.dtype != torch.int64:
+                cust_idx = cust_idx.long()
+            if vrp_dynamics.nodes_count > 0:
+                cust_idx = cust_idx.clamp(0, vrp_dynamics.nodes_count - 1)
+
+            # If a masked customer was sampled due to numerical issues, route to depot.
+            chosen_mask = vrp_dynamics.cur_veh_mask.gather(2, cust_idx.unsqueeze(1)).squeeze(1)
+            if chosen_mask.any():
+                cust_idx = cust_idx.masked_fill(chosen_mask, 0)
+
             if not(self.use_cumul and bl_vals):
                 bl_vals.append( self.eval_step(vrp_dynamics, compat, cust_idx) )
             if hasattr(self.learner, "_update_memory") and "edge_emb" in locals():

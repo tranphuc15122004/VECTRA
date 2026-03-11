@@ -3,8 +3,17 @@ import torch.nn.functional as F
 
 from itertools import repeat
 
+
+def _apply_reduction(value, reduction):
+    if reduction == 'none':
+        return value
+    if reduction == 'sum':
+        return value.sum()
+    return value.mean()
+
+
 def reinforce_loss(logprobs, rewards, baseline = None, weights = None, discount = 1.0, reduction = 'mean',
-                   adv_norm = False, entropy_coef = 0.0):
+                   adv_norm = False, entropy_coef = 0.0, return_components = False):
     r"""
     :param logprobs:     Iterable of length :math:`L` on tensors of size :math:`N \times 1`
     :param rewards:      Iterable of length :math:`L` on tensors of size :math:`N \times 1`
@@ -22,6 +31,9 @@ def reinforce_loss(logprobs, rewards, baseline = None, weights = None, discount 
                          exploration and prevents premature policy collapse.  The logprob
                          of each chosen action is used as a proxy: bonus = entropy_coef * logp
                          (since logp < 0, subtracting it from the loss increases entropy).
+    :param return_components:
+                         If True, also return a dict with the reduced policy, critic,
+                         and entropy contributions that sum to the final loss.
     """
     if weights is None:
         weights = repeat(1.0)
@@ -34,16 +46,19 @@ def reinforce_loss(logprobs, rewards, baseline = None, weights = None, discount 
         if adv_norm:
             adv = (adv - adv.mean()) / (adv.std(unbiased = False) + 1e-8)
 
-        loss = torch.stack([-logp * w for logp, w in zip(logprobs, weights)]).sum(dim = 0)
-        loss = loss * adv
+        policy_loss = torch.stack([-logp * w for logp, w in zip(logprobs, weights)]).sum(dim = 0)
+        policy_loss = policy_loss * adv
 
+        critic_loss = torch.zeros_like(policy_loss)
         if baseline.requires_grad:
-            loss = loss + F.smooth_l1_loss(baseline, rewards)
+            critic_loss = F.smooth_l1_loss(baseline, rewards, reduction = 'none')
 
+        entropy_loss = torch.zeros_like(policy_loss)
         if entropy_coef > 0.0:
             # Entropy bonus: logp < 0, so adding entropy_coef * logp *reduces* certainty
-            entropy_bonus = torch.stack(logprobs).sum(dim = 0) * entropy_coef
-            loss = loss + entropy_bonus
+            entropy_loss = torch.stack(logprobs).sum(dim = 0) * entropy_coef
+
+        loss = policy_loss + critic_loss + entropy_loss
 
     else:
         cumul = torch.zeros_like(rewards[0])
@@ -71,25 +86,33 @@ def reinforce_loss(logprobs, rewards, baseline = None, weights = None, discount 
             adv_std  = all_advs.std(unbiased = False) + 1e-8
             advs = [(a - adv_mean) / adv_std for a in advs]
 
-        loss = []
-        bl_loss = []
+        policy_loss = []
+        critic_loss = []
         for val, logp, bl, w, adv in zip(vals, logprobs, bl_list, weights, advs):
-            loss.append( -logp * adv * w )
+            policy_loss.append( -logp * adv * w )
             if bl.requires_grad:
-                bl_loss.append( F.smooth_l1_loss(bl, val) )
-        loss = torch.stack(loss).sum(dim = 0)
+                critic_loss.append(F.smooth_l1_loss(bl, val, reduction = 'none'))
+        policy_loss = torch.stack(policy_loss).sum(dim = 0)
 
-        if bl_loss:
+        if critic_loss:
             # Keep critic gradients stable across longer trajectories.
-            loss = loss + torch.stack(bl_loss).mean()
+            critic_loss = torch.stack(critic_loss).mean(dim = 0)
+        else:
+            critic_loss = torch.zeros_like(policy_loss)
 
+        entropy_loss = torch.zeros_like(policy_loss)
         if entropy_coef > 0.0:
-            entropy_bonus = torch.stack(logprobs).sum(dim = 0) * entropy_coef
-            loss = loss + entropy_bonus
+            entropy_loss = torch.stack(logprobs).sum(dim = 0) * entropy_coef
 
-    if reduction == 'none':
+        loss = policy_loss + critic_loss + entropy_loss
+
+    loss = _apply_reduction(loss, reduction)
+    if not return_components:
         return loss
-    elif reduction == 'sum':
-        return loss.sum()
-    else: # reduction == 'mean'
-        return loss.mean()
+
+    components = {
+        'policy_loss': _apply_reduction(policy_loss, reduction),
+        'critic_loss': _apply_reduction(critic_loss, reduction),
+        'entropy_loss': _apply_reduction(entropy_loss, reduction),
+    }
+    return loss, components

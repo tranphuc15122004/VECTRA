@@ -2,6 +2,7 @@ import torch
 import math
 import os.path
 import os
+import csv
 import random
 import numpy as np
 from itertools import repeat, zip_longest
@@ -89,6 +90,7 @@ def update_train_test_stats(args, ep, train_stats, val_stats):
 
     header = [
         "EP", "LOSS", "PROB", "VAL", "BL", "NORM",
+        "POLICY_LOSS", "CRITIC_LOSS", "ENTROPY_LOSS",
         "VAL_MU", "VAL_STD"
     ]
 
@@ -116,9 +118,41 @@ def update_train_test_stats(args, ep, train_stats, val_stats):
         vals = [to_float(v) for v in vals]
         return (vals + [float("nan")] * n)[:n]
 
-    write_header = not os.path.exists(fpath)
+    def migrate_train_statistics_file_if_needed():
+        if not os.path.exists(fpath):
+            return True
+        with open(fpath, "r", newline = "") as f:
+            first_line = f.readline().strip()
+        if first_line == ",".join(header):
+            return False
 
-    tr_vals = safe_vals(train_stats, 5)
+        rows = []
+        with open(fpath, "r", newline = "") as f:
+            reader = csv.reader(f)
+            old_header = next(reader, None)
+            for record in reader:
+                if not record:
+                    continue
+                rows.append(record)
+
+        with open(fpath, "w", newline = "") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            for record in rows:
+                ep_value = record[0] if record else ""
+                train_vals = list(record[1:6]) if len(record) > 1 else []
+                val_vals = list(record[6:8]) if len(record) > 6 else []
+                writer.writerow(
+                    [ep_value]
+                    + (train_vals + ["nan"] * 5)[:5]
+                    + ["nan", "nan", "nan"]
+                    + (val_vals + ["nan"] * 2)[:2]
+                )
+        return False
+
+    write_header = migrate_train_statistics_file_if_needed()
+
+    tr_vals = safe_vals(train_stats, 8)
     va_vals = safe_vals(val_stats, 2)
 
     row = [ep] + tr_vals + va_vals
