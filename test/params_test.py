@@ -26,7 +26,7 @@ def main():
 		data.CUST_FEAT_SIZE,
 		dyna.VEH_STATE_SIZE,
 		args.model_size,
-		args.layer_count,
+		6,
 		args.head_count,
 		args.ff_size,
 		args.tanh_xplor,

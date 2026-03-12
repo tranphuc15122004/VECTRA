@@ -1,10 +1,16 @@
-# VECTRA: Vehicle-Edge-Customer Temporal Routing Anticipation
+# COAST: Coordinated Ownership and Anticipatory Sequential rouTing
 
-**Dynamic Vehicle Routing with Multi-Agent Deep Reinforcement Learning**
+**Paper title:** Decomposing Coordination and Anticipation in Sequential Policies for Dynamic Vehicle Routing with Time Windows
 
 ## Tổng quan
 
-Repository này triển khai một kiến trúc học sâu tiên tiến cho bài toán **Dynamic Vehicle Routing Problem with Time Windows (DVRPTW)** sử dụng **Edge-Enhanced Learning** kết hợp với **Coordination Memory** và **Adaptive Planning**.
+Repository này triển khai COAST, một kiến trúc học sâu cho bài toán **Dynamic Vehicle Routing Problem with Time Windows (DVRPTW)** với luận điểm trung tâm là tách rõ hai khó khăn vốn bị trộn lẫn trong policy tuần tự dùng chung: **phối hợp giữa các xe** và **dự đoán hậu quả dài hạn của từng quyết định**. Thay vì xem bài toán chỉ là học một compatibility score duy nhất, COAST mô hình hóa riêng tín hiệu **coordination** thông qua latent ownership và tín hiệu **anticipation** thông qua candidate-conditioned lookahead, rồi hợp nhất chúng dưới các ràng buộc edge-aware.
+
+Tài liệu nghiên cứu trong repo dùng tên model là **COAST**. Mã nguồn hiện tại vẫn giữ tên triển khai cũ như `MODEL/model/vectra.py` và class `VECTRA`; đây là tên implementation legacy và chưa được refactor đồng bộ sang mã nguồn.
+
+### Thesis chính
+
+COAST được xây dựng quanh một giả thuyết học thuật: **shared sequential policies trong DVRPTW hoạt động kém khi coordination và anticipation bị entangled trong cùng một scoring path**. Thiết kế của model vì vậy không đặt trọng tâm vào việc thêm nhiều module rời rạc, mà vào một **structured decomposition** để policy trả lời rõ hai câu hỏi tại mỗi bước: *xe nào nên phục vụ khách nào* và *nếu chọn khách này thì điều gì sẽ xảy ra tiếp theo*.
 
 ### Đặc điểm chính
 
@@ -14,7 +20,15 @@ Model được thiết kế theo paradigm **sequential Multi-agent Markov Decisi
 - **Per-vehicle memory**: Mỗi phương tiện duy trì trạng thái ẩn riêng để phối hợp với đội xe
 - **Edge-aware representation**: Biểu diễn chi tiết các ràng buộc giữa xe và khách hàng
 
-### Kiến trúc tổng thể
+### Cơ chế cốt lõi
+
+Về mặt khoa học, COAST xoay quanh 2 tín hiệu có cấu trúc và 1 cơ chế hợp nhất quyết định:
+
+1. **Latent ownership**: Suy ra phân công mềm giữa xe và khách hàng từ per-vehicle memory để giảm xung đột giữa các xe
+2. **Candidate-conditioned lookahead**: Ước lượng hệ quả dài hạn của từng khách hàng ứng viên để tránh quyết định tham lam
+3. **Edge-aware fusion**: Hợp nhất attention, ownership và lookahead dưới các ràng buộc khoảng cách, time windows và capacity
+
+### Các thành phần triển khai
 
 Model kết hợp 7 thành phần chính:
 
@@ -28,14 +42,14 @@ Model kết hợp 7 thành phần chính:
 
 ### Quy trình ra quyết định
 
-Tại mỗi bước, xe đang hoạt động chọn khách hàng tiếp theo thông qua:
+Tại mỗi bước, xe đang hoạt động chọn khách hàng tiếp theo thông qua một score đã được phân rã thành tín hiệu phối hợp và tín hiệu nhìn trước:
 
 $$\text{score}_j = \text{ScoreFusion}(\text{att\_score}_j, \text{owner\_bias}_j, \text{lookahead}_j)$$
 
 Trong đó **ScoreFusion** là MLP học cách kết hợp 3 nguồn tín hiệu:
 - **att_score**: Độ tương thích attention giữa xe và khách hàng
-- **owner_bias**: Xác suất xe này nên phục vụ khách hàng (log-prob)
-- **lookahead**: Ước lượng chi phí tương lai nếu chọn khách hàng này
+- **owner_bias**: Xác suất mềm cho biết khách hàng này nên thuộc về xe đang xét hay không
+- **lookahead**: Ước lượng hậu quả chi phí dài hạn nếu chọn khách hàng này
 
 ---
 
@@ -1078,6 +1092,9 @@ def step(dyna):
 ## Hyperparameters & Configuration
 
 ### Model Architecture
+
+Constructor trong mã nguồn hiện tại vẫn mang tên legacy `VECTRA`, nhưng đây là implementation của COAST.
+
 ```python
 VECTRA(
     cust_feat_size=7,       # (x, y, demand, tw_start, tw_end, ...)
@@ -1106,32 +1123,31 @@ baseline = "critic"
 
 ---
 
-## Key Innovations
+## Core Thesis And Mechanisms
 
-### 1. Edge-Enhanced Representation
-- **Problem**: Traditional methods treat vehicle-customer compatibility as pure attention
-- **Solution**: Explicit edge features (time windows, capacity, distance) encoded separately
-- **Impact**: Model understands constraints better → higher feasibility
+### 1. Structured decision decomposition
+- **Problem**: Shared sequential policies thường trộn coordination và anticipation vào cùng một compatibility score
+- **Solution**: Tách tín hiệu phân công mềm theo ownership khỏi tín hiệu lookahead theo từng khách hàng ứng viên
+- **Impact**: Policy học rõ hơn ai nên phục vụ khách nào và lựa chọn nào tốt về dài hạn
 
-### 2. Score Fusion with Normalization
-- **Problem**: Different signals (attention, ownership, lookahead) có scales khác nhau
-- **Solution**: Z-normalization + MLP fusion
-- **Impact**: Balanced contribution, learned non-linear interactions
+### 2. Implicit fleet coordination via latent ownership
+- **Problem**: Nhiều xe dễ chồng lấn vùng phục vụ hoặc tranh cùng khách hàng trong môi trường động
+- **Solution**: Per-vehicle memory được dùng để sinh ownership bias, từ đó tạo phân công mềm giữa các xe mà không cần communication explicit
+- **Impact**: Giảm xung đột, làm rõ service regions, và tăng tính diễn giải của quyết định
 
-### 3. Coordination Memory
-- **Problem**: Multiple vehicles conflict (choose same customers)
-- **Solution**: Per-vehicle memory + ownership prediction
-- **Impact**: Implicit coordination without communication
+### 3. Anticipatory routing via candidate-conditioned lookahead
+- **Problem**: Chọn khách gần nhất thường dẫn đến quyết định tham lam và bỏ lỡ cấu trúc dài hạn của route
+- **Solution**: Dự đoán chi phí tương lai theo từng ứng viên để model biết khi nào nên bỏ qua lựa chọn hấp dẫn trước mắt
+- **Impact**: Xử lý tốt hơn isolated customers, giảm detour và tăng độ bền khi arrival regime thay đổi
 
-### 4. Lookahead Head
-- **Problem**: Greedy selection leads to poor long-term performance
-- **Solution**: Value network estimates future cost
-- **Impact**: Better handling of isolated customers, reduced detours
+### 4. Edge-aware feasibility as implementation support
+- **Problem**: Coordination và lookahead sẽ kém hiệu quả nếu policy không bám chặt các ràng buộc time window và capacity
+- **Solution**: Edge features, cross-edge fusion và normalization giúp các tín hiệu được so sánh công bằng dưới feasibility constraints
+- **Impact**: Giữ decision decomposition gắn với thực tế vận hành của DVRPTW
 
-### 5. Graph Encoder with RBF Bias
-- **Problem**: Standard Transformer ignores spatial structure
-- **Solution**: RBF distance encoding + k-NN sparsification
-- **Impact**: Better spatial reasoning, lower complexity
+### 5. Supporting encoders and fusion are implementation choices
+- **Positioning**: GraphEncoder, FleetEncoder, RBF bias, k-NN sparsification và MLP fusion là các lựa chọn triển khai để hiện thực hóa thesis của COAST
+- **Claim**: Novelty của hướng nghiên cứu nằm ở structured decomposition giữa coordination và anticipation, không nằm ở từng encoder đơn lẻ
 
 
 ---
@@ -1142,7 +1158,7 @@ baseline = "critic"
 mardam-master/
 ├── MODEL/
 │   └── model/
-│       └── vectra.py              # Main model (VECTRA)
+│       └── vectra.py              # Current implementation of COAST (legacy module name)
 ├── layers/
 │   ├── Mymodel_layers.py          # Custom layers (GraphEncoder, FleetEncoder, ...)
 │   ├── _mha.py                    # Multi-head attention
