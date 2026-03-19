@@ -36,30 +36,22 @@ def save_best_val_checkpoint(args, ep, learner, optim, baseline = None, lr_sched
 def _compute_step_outputs(learner, baseline, dyna):
 	veh_repr = learner._repr_vehicle(dyna.vehicles, dyna.cur_veh_idx, dyna.mask)
 
-	if hasattr(learner, "edge_encoder") and hasattr(learner, "owner_head"):
-		edge_feat = learner._build_edge_features(
+	if hasattr(learner, "_compute_edge_embedding") and hasattr(learner, "_compute_owner_bias") and hasattr(learner, "_compute_lookahead"):
+		edge_emb = learner._compute_edge_embedding(
 			dyna.vehicles,
 			dyna.nodes,
 			dyna.cur_veh_idx,
 			dyna.cur_veh_mask,
 		)
-		edge_emb = learner.edge_encoder(edge_feat)
-
-		owner_logits = learner.owner_head(learner._veh_memory, learner.cust_repr)
-		owner_prob = owner_logits.softmax(dim = 1)
-		owner_bias = owner_prob.gather(
-			1,
-			dyna.cur_veh_idx[:, :, None].expand(-1, -1, owner_prob.size(-1)),
-		)
-		owner_bias = owner_bias.clamp_min(1e-9).log()
-
-		lookahead = learner.lookahead_head(veh_repr, learner.cust_repr, edge_emb)
+		owner_bias = learner._compute_owner_bias(dyna.cur_veh_idx)
+		lookahead = learner._compute_lookahead(veh_repr, learner.cust_repr, edge_emb)
 		compat = learner._score_customers(
 			veh_repr,
 			learner.cust_repr,
 			edge_emb,
 			owner_bias,
 			lookahead,
+			dyna.cur_veh_mask,
 		)
 	else:
 		edge_emb = None
@@ -418,6 +410,12 @@ def main(args):
 		latent_bottleneck = args.latent_bottleneck,
 		latent_tokens = args.latent_tokens,
 		latent_min_nodes = args.latent_min_nodes,
+		use_edge_features = args.use_edge_features,
+		use_memory = args.use_memory,
+		use_ownership = args.use_ownership,
+		use_lookahead = args.use_lookahead,
+		fusion_mode = args.fusion_mode,
+		linear_fusion_weights = args.linear_fusion_weights,
 	)
 	learner.to(dev)
 	verbose_print("Done.")

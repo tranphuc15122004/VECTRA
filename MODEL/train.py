@@ -476,6 +476,12 @@ def main(args):
             latent_bottleneck = args.latent_bottleneck,
             latent_tokens = args.latent_tokens,
             latent_min_nodes = args.latent_min_nodes,
+            use_edge_features = args.use_edge_features,
+            use_memory = args.use_memory,
+            use_ownership = args.use_ownership,
+            use_lookahead = args.use_lookahead,
+            fusion_mode = args.fusion_mode,
+            linear_fusion_weights = args.linear_fusion_weights,
             )
     learner.to(dev)
     verbose_print("Done.")

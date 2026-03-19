@@ -4,6 +4,28 @@ import torch
 class SDVRPTW_Environment(SVRPTW_Environment):
     CUST_FEAT_SIZE = 7
 
+    def _keep_alive_until_reveal(self, acted_veh_idx, cust_idx):
+        # If depot is selected while hidden customers still exist, keep at least
+        # one vehicle active and advance time to the next reveal instant.
+        unrevealed = self.cust_mask[:, 1:].any(dim = 1, keepdim = True)
+        force_wait = (cust_idx == 0) & unrevealed
+        if not force_wait.any():
+            return
+
+        hidden = self.cust_mask.clone()
+        hidden[:, 0] = False
+        hidden_times = self.nodes[:, :, 6].masked_fill(~hidden, float("inf"))
+        next_reveal = hidden_times.min(dim = 1, keepdim = True).values
+
+        inst_wait = force_wait.squeeze(1)
+        if inst_wait.any():
+            next_t = next_reveal[inst_wait]
+            self.vehicles[inst_wait, :, 3] = torch.maximum(self.vehicles[inst_wait, :, 3], next_t)
+
+        self.veh_done.scatter_(1, acted_veh_idx, torch.zeros_like(cust_idx, dtype = torch.bool))
+        self.done = bool(self.veh_done.all())
+        self._update_cur_veh()
+
     def _update_hidden(self):
         time = self.cur_veh[:, :, 3].clone()
         if self.init_cust_mask is None:
@@ -39,6 +61,8 @@ class SDVRPTW_Environment(SVRPTW_Environment):
         self.cur_veh_mask = self.mask.gather(1, self.cur_veh_idx[:,:,None].expand(-1,-1,self.nodes_count))
 
     def step(self, cust_idx):
+        acted_veh_idx = self.cur_veh_idx.clone()
         reward = super().step(cust_idx)
+        self._keep_alive_until_reveal(acted_veh_idx, cust_idx)
         self._update_hidden()
         return reward

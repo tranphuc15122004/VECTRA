@@ -17,9 +17,9 @@ LR=${LR:-1e-4}
 
 # ── Model architecture (matching old training command) ────────────────────────
 MODEL_SIZE=${MODEL_SIZE:-128}
-LAYER_COUNT=${LAYER_COUNT:-3}
+LAYER_COUNT=${LAYER_COUNT:-2}
 HEAD_COUNT=${HEAD_COUNT:-4}
-FF_SIZE=${FF_SIZE:-512}
+FF_SIZE=${FF_SIZE:-256}
 EDGE_FEAT_SIZE=${EDGE_FEAT_SIZE:-8}
 CUST_K=${CUST_K:-20}
 MEMORY_SIZE=${MEMORY_SIZE:-128}

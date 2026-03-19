@@ -24,23 +24,15 @@ class Baseline:
                         vrp_dynamics.vehicles,
                         vrp_dynamics.cur_veh_idx,
                         vrp_dynamics.mask)
-                if hasattr(self.learner, "edge_encoder") and hasattr(self.learner, "owner_head"):
-                    edge_feat = self.learner._build_edge_features(
+                if hasattr(self.learner, "_compute_edge_embedding") and hasattr(self.learner, "_compute_owner_bias") and hasattr(self.learner, "_compute_lookahead"):
+                    edge_emb = self.learner._compute_edge_embedding(
                         vrp_dynamics.vehicles,
                         vrp_dynamics.nodes,
                         vrp_dynamics.cur_veh_idx,
-                        vrp_dynamics.cur_veh_mask)
-                    edge_emb = self.learner.edge_encoder(edge_feat)
-
-                    owner_logits = self.learner.owner_head(self.learner._veh_memory, self.learner.cust_repr)
-                    owner_prob = owner_logits.softmax(dim = 1)
-                    owner_bias = owner_prob.gather(
-                        1,
-                        vrp_dynamics.cur_veh_idx[:, :, None].expand(-1, -1, owner_prob.size(-1))
+                        vrp_dynamics.cur_veh_mask,
                     )
-                    owner_bias = owner_bias.clamp_min(1e-9).log()
-
-                    lookahead = self.learner.lookahead_head(veh_repr, self.learner.cust_repr, edge_emb)
+                    owner_bias = self.learner._compute_owner_bias(vrp_dynamics.cur_veh_idx)
+                    lookahead = self.learner._compute_lookahead(veh_repr, self.learner.cust_repr, edge_emb)
                     compat = self.learner._score_customers(
                         veh_repr,
                         self.learner.cust_repr,

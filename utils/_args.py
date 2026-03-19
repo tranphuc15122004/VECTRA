@@ -41,12 +41,19 @@ CUST_K = None
 MEMORY_SIZE = None
 LOOKAHEAD_HIDDEN = 128
 MODEL_DROPOUT = 0.1
-ADAPTIVE_DEPTH = True
+ADAPTIVE_DEPTH = False
 ADAPTIVE_MIN_LAYERS = 1
 ADAPTIVE_EASY_RATIO = 0.7
-LATENT_BOTTLENECK = True
+LATENT_BOTTLENECK = False
 LATENT_TOKENS = 32
 LATENT_MIN_NODES = 64
+USE_EDGE_FEATURES = True
+USE_MEMORY = True
+USE_OWNERSHIP = True
+USE_LOOKAHEAD = True
+FUSION_MODE = "mlp"
+LINEAR_FUSION_WEIGHTS = (1.0, 1.0, 1.0)
+ABLATION_PROFILE = "none"
 
 EPOCH_COUNT = 20
 ITER_COUNT = 1000
@@ -85,6 +92,119 @@ OUTPUT_DIR = None
 RESUME_STATE = None
 MODEL_WEIGHT = None
 CHECKPOINT_PERIOD = 5
+
+
+def _apply_ablation_profile(args):
+        profile = getattr(args, "ablation_profile", "none")
+        if profile in (None, "none"):
+                return args
+
+        profiles = {
+                # full COAST-style model
+                "coast": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": True,
+                        "use_lookahead": True,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                # B0-None in current implementation scope
+                "b0": {
+                        "use_edge_features": True,
+                        "use_memory": False,
+                        "use_ownership": False,
+                        "use_lookahead": False,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                # B1-Memory
+                "b1": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": False,
+                        "use_lookahead": False,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                # B3-Look
+                "b3": {
+                        "use_edge_features": True,
+                        "use_memory": False,
+                        "use_ownership": False,
+                        "use_lookahead": True,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                # B5-Linear fusion
+                "b5": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": True,
+                        "use_lookahead": True,
+                        "fusion_mode": "linear",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                # Edge-off ablation
+                "edgeoff": {
+                        "use_edge_features": False,
+                        "use_memory": True,
+                        "use_ownership": True,
+                        "use_lookahead": True,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                # aliases for current-scope matrix
+                "a0": {
+                        "use_edge_features": True,
+                        "use_memory": False,
+                        "use_ownership": False,
+                        "use_lookahead": False,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                "a1": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": False,
+                        "use_lookahead": False,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                "a3": {
+                        "use_edge_features": True,
+                        "use_memory": False,
+                        "use_ownership": False,
+                        "use_lookahead": True,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                "a4": {
+                        "use_edge_features": False,
+                        "use_memory": True,
+                        "use_ownership": True,
+                        "use_lookahead": True,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                "a9": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": True,
+                        "use_lookahead": True,
+                        "fusion_mode": "linear",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+        }
+
+        selected = profiles.get(profile)
+        if selected is None:
+                raise ValueError("Unknown ablation profile '{}'".format(profile))
+
+        for key, value in selected.items():
+                setattr(args, key, value)
+
+        return args
 
 
 def write_config_file(args, output_file):
@@ -144,6 +264,20 @@ def parse_args(argv = None):
     group.add_argument("--latent-bottleneck", action = "store_true", default = LATENT_BOTTLENECK)
     group.add_argument("--latent-tokens", type = int, default = LATENT_TOKENS)
     group.add_argument("--latent-min-nodes", type = int, default = LATENT_MIN_NODES)
+    group.add_argument(
+            "--ablation-profile",
+            type = str,
+            choices = ["none", "coast", "b0", "b1", "b3", "b5", "edgeoff", "a0", "a1", "a3", "a4", "a9"],
+            default = ABLATION_PROFILE,
+            help = "Apply a predefined ablation configuration with one flag",
+    )
+    group.add_argument("--disable-edge-features", action = "store_false", dest = "use_edge_features", default = USE_EDGE_FEATURES)
+    group.add_argument("--disable-memory", action = "store_false", dest = "use_memory", default = USE_MEMORY)
+    group.add_argument("--disable-ownership", action = "store_false", dest = "use_ownership", default = USE_OWNERSHIP)
+    group.add_argument("--disable-lookahead", action = "store_false", dest = "use_lookahead", default = USE_LOOKAHEAD)
+    group.add_argument("--fusion-mode", type = str, choices = ["mlp", "linear"], default = FUSION_MODE)
+    group.add_argument("--linear-fusion-weights", type = float, nargs = 3, default = LINEAR_FUSION_WEIGHTS,
+            help = "Weights for linear fusion mode: att ownership lookahead")
 
     group = parser.add_argument_group("Training parameters")
     group.add_argument("--epoch-count", "-e", type = int, default = EPOCH_COUNT)
@@ -191,11 +325,11 @@ def parse_args(argv = None):
     group.add_argument("--checkpoint-period", "-c", type = int, default = CHECKPOINT_PERIOD)
     group.add_argument("--resume-state", type = str, default = RESUME_STATE)
     group.add_argument("--model-weight", type = str, default = MODEL_WEIGHT)
-    
 
     args = parser.parse_args(argv)
     if args.config_file is not None:
         with open(args.config_file) as f:
             parser.set_defaults(**json.load(f))
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    return _apply_ablation_profile(args)

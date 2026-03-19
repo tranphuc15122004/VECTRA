@@ -39,7 +39,9 @@ class VECTRA(nn.Module):
             layer_count = 3, head_count = 8, ff_size = 512, tanh_xplor = 10, greedy = False,
             edge_feat_size = 8, cust_k = None, memory_size = None, lookahead_hidden = 128 , dropout = 0.1,
             adaptive_depth = False, adaptive_min_layers = 1, adaptive_easy_ratio = 0.6,
-            latent_bottleneck = False, latent_tokens = 32, latent_min_nodes = 64):
+            latent_bottleneck = False, latent_tokens = 32, latent_min_nodes = 64,
+            use_edge_features = True, use_memory = True, use_ownership = True,
+            use_lookahead = True, fusion_mode = "mlp", linear_fusion_weights = (1.0, 1.0, 1.0)):
         r"""
         :param model_size:  Dimension :math:`D` shared by all intermediate layers
         :param layer_count: Number of layers in customers' (graph) Transformer Encoder
@@ -53,6 +55,21 @@ class VECTRA(nn.Module):
         self.inv_sqrt_d = model_size ** -0.5
 
         self.tanh_xplor = tanh_xplor
+        self.use_edge_features = use_edge_features
+        self.use_memory = use_memory
+        self.use_ownership = use_ownership
+        self.use_lookahead = use_lookahead
+        self.fusion_mode = fusion_mode
+        if self.fusion_mode not in ("mlp", "linear"):
+            raise ValueError("fusion_mode must be either 'mlp' or 'linear'")
+
+        if len(linear_fusion_weights) != 3:
+            raise ValueError("linear_fusion_weights must contain exactly 3 values")
+        self.register_buffer(
+            "linear_fusion_weights",
+            torch.tensor(linear_fusion_weights, dtype = torch.float32).view(1, 1, 1, 3),
+            persistent = True,
+        )
 
         self.depot_embedding = nn.Linear(cust_feat_size, model_size)
         self.cust_embedding  = nn.Linear(cust_feat_size, model_size)
@@ -103,6 +120,7 @@ class VECTRA(nn.Module):
         self.latent_tokens = latent_tokens
         self.latent_min_nodes = latent_min_nodes
         self._forward_profiler = ForwardProfiler()
+        self._veh_memory = None
 
 
     def _build_bottleneck_indices(self, length, max_tokens, device):
@@ -312,8 +330,11 @@ class VECTRA(nn.Module):
             look_norm
         ], dim = -1)
         
-        # Non-linear fusion using the score_fusion MLP
-        compat_base = self.score_fusion(combined_scores).squeeze(-1)
+        if self.fusion_mode == "mlp":
+            compat_base = self.score_fusion(combined_scores).squeeze(-1)
+        else:
+            weights = self.linear_fusion_weights.to(combined_scores.dtype)
+            compat_base = (combined_scores * weights).sum(dim = -1)
         if score_mask is not None:
             compat_base = compat_base.masked_fill(score_mask, 0.0)
 
@@ -323,6 +344,50 @@ class VECTRA(nn.Module):
             compat = self.tanh_xplor * compat.tanh()
         self._forward_profiler.add("score_customers", time.perf_counter() - start)
         return compat
+
+
+    def _zero_edge_embedding(self, veh_count, cust_count, device, dtype):
+        return torch.zeros(
+            (veh_count, 1, cust_count, self.model_size),
+            device = device,
+            dtype = dtype,
+        )
+
+
+    def _compute_edge_embedding(self, vehicles, customers, veh_idx, veh_mask = None):
+        if self.use_edge_features:
+            edge_feat = self._build_edge_features(vehicles, customers, veh_idx, veh_mask)
+            return self.edge_encoder(edge_feat)
+
+        return self._zero_edge_embedding(
+            vehicles.size(0),
+            customers.size(1),
+            customers.device,
+            self.cust_repr.dtype,
+        )
+
+
+    def _compute_owner_bias(self, cur_veh_idx):
+        if not self.use_ownership or self._veh_memory is None:
+            return self.cust_repr.new_zeros((self.cust_repr.size(0), 1, self.cust_repr.size(1)))
+
+        owner_start = time.perf_counter()
+        owner_logits = self.owner_head(self._veh_memory, self.cust_repr)
+        owner_prob = owner_logits.softmax(dim = 1)
+        owner_bias = owner_prob.gather(1, cur_veh_idx[:, :, None].expand(-1, -1, owner_prob.size(-1)))
+        owner_bias = owner_bias.clamp_min(1e-9).log()
+        self._forward_profiler.add("ownership_head", time.perf_counter() - owner_start)
+        return owner_bias
+
+
+    def _compute_lookahead(self, veh_repr, cust_repr, edge_emb):
+        if not self.use_lookahead:
+            return cust_repr.new_zeros((cust_repr.size(0), veh_repr.size(1), cust_repr.size(1)))
+
+        lookahead_start = time.perf_counter()
+        lookahead = self.lookahead_head(veh_repr, cust_repr, edge_emb)
+        self._forward_profiler.add("lookahead_head", time.perf_counter() - lookahead_start)
+        return lookahead
 
 
     def _get_logp(self, compat : torch.Tensor, veh_mask):
@@ -351,24 +416,20 @@ class VECTRA(nn.Module):
         
         veh_repr = self._repr_vehicle(dyna.vehicles, dyna.cur_veh_idx, dyna.cur_veh_mask)
         
-        edge_feat = self._build_edge_features(dyna.vehicles, dyna.nodes, dyna.cur_veh_idx, dyna.cur_veh_mask)
-        edge_emb = self.edge_encoder(edge_feat)
-
-        owner_start = time.perf_counter()
-        owner_logits = self.owner_head(self._veh_memory, self.cust_repr)
-        owner_prob = owner_logits.softmax(dim = 1)
-        owner_bias = owner_prob.gather(1, dyna.cur_veh_idx[:, :, None].expand(-1, -1, owner_prob.size(-1)))
-        owner_bias = owner_bias.clamp_min(1e-9).log()
-        self._forward_profiler.add("ownership_head", time.perf_counter() - owner_start)
+        edge_emb = self._compute_edge_embedding(
+            dyna.vehicles,
+            dyna.nodes,
+            dyna.cur_veh_idx,
+            dyna.cur_veh_mask,
+        )
+        owner_bias = self._compute_owner_bias(dyna.cur_veh_idx)
 
         cand_mask = dyna.cur_veh_mask
         cust_repr_scored = self.cust_repr
         edge_emb_scored = edge_emb
         owner_bias_scored = owner_bias
 
-        lookahead_start = time.perf_counter()
-        lookahead = self.lookahead_head(veh_repr, cust_repr_scored, edge_emb_scored)
-        self._forward_profiler.add("lookahead_head", time.perf_counter() - lookahead_start)
+        lookahead = self._compute_lookahead(veh_repr, cust_repr_scored, edge_emb_scored)
         compat : torch.Tensor = self._score_customers(
             veh_repr,
             cust_repr_scored,
@@ -389,6 +450,8 @@ class VECTRA(nn.Module):
 
 
     def _update_memory(self, veh_idx, cust_idx, veh_repr, edge_emb):
+        if not self.use_memory or self._veh_memory is None:
+            return
         start = time.perf_counter()
         edge_sel = edge_emb.gather(2, cust_idx[:, :, None, None].expand(-1, -1, -1, edge_emb.size(-1)))
         cust_sel = self.cust_repr.gather(1, cust_idx[:, :, None].expand(-1, -1, self.cust_repr.size(-1)))
@@ -414,6 +477,9 @@ class VECTRA(nn.Module):
 
 
     def _reset_memory(self, dyna):
+        if not self.use_memory:
+            self._veh_memory = None
+            return
         self._veh_memory = dyna.vehicles.new_zeros((dyna.vehicles.size(0), dyna.vehicles.size(1), self.coord_memory.hidden_size))
 
     def reset_forward_profiling(self):

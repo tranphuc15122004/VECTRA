@@ -2,11 +2,18 @@
 
 **Purpose:** This document provides a complete experimental checklist to validate the four core hypotheses of COAST's structured decomposition approach for DVRPTW.
 
-**Core Hypotheses:**
-- **H1:** Coordination memory + ownership reduces inter-vehicle conflicts
+**Core Hypotheses (Reframed for Current Implementation):**
+- **H1':** Adding ownership signal on top of memory improves coordination and reduces inter-vehicle conflicts
 - **H2:** Candidate-conditioned lookahead reduces myopia and improves isolated customer handling
 - **H3:** Edge-aware scoring improves feasibility under tight constraints
-- **H4:** Structured decomposition generalizes better than monolithic scoring under distribution shift
+- **H4':** Structured multi-signal decomposition with nonlinear fusion generalizes better than simplified fusion baselines under distribution shift
+
+**Scope Note:**
+- The current codebase supports strong ablations for B0, B1, B3, B5, COAST, and edge-off variants.
+- Two originally planned baselines are not yet implemented in architecture-faithful form:
+   - **B2-Own (state-only ownership without memory history)**
+   - **B4-Mono (true monolithic scorer with matched parameter budget)**
+- Therefore, this protocol focuses on testable claims with currently implemented baselines and treats B2/B4 as future extensions.
 
 ---
 
@@ -18,23 +25,25 @@
 
 | Baseline ID | Description | Components |
 |-------------|-------------|------------|
-| **B0-None** | No memory, no ownership, no lookahead | Cross-attention only |
-| **B1-Memory** | Memory only, no ownership head | Memory updated, but not used for scoring |
-| **B2-Own** | Ownership only, no memory | Ownership from vehicle state (no history) |
-| **B3-Look** | Lookahead only, no coordination | Lookahead + attention, no ownership |
-| **B4-Mono** | Monolithic attention | Single large attention head, same param budget |
+| **B0-None** | No memory, no ownership, no lookahead | Attention + edge (default scorer), ownership/lookahead off |
+| **B1-Memory** | Memory only, no ownership head | Memory update on, ownership/lookahead off |
+| **B3-Look** | Lookahead only, no coordination | Lookahead + attention, memory/ownership off |
 | **B5-Linear** | Linear fusion | Replace MLP fusion with fixed weighted sum |
+| **B-EdgeOff** | No edge features | Same as COAST but edge encoder input disabled |
 | **COAST** | Full model | Memory + ownership + lookahead + MLP fusion |
 
-**Implementation Checklist:**
-- [ ] Implement B0-None (only CrossEdgeFusion, no ownership bias, no lookahead)
-- [ ] Implement B1-Memory (update memory but don't use in ownership)
-- [ ] Implement B2-Own (ownership from current state only)
-- [ ] Implement B3-Look (lookahead only)
-- [ ] Implement B4-Mono (single attention head with equivalent parameters)
+**Deferred Baselines (Future Work):**
+- **B2-Own** (state-only ownership, no history memory)
+- **B4-Mono** (single monolithic scorer with parameter matching)
+
+**Implementation Checklist (Current Scope):**
+- [ ] Implement B0-None (memory/ownership/lookahead disabled)
+- [ ] Implement B1-Memory (memory enabled, ownership/lookahead disabled)
+- [ ] Implement B3-Look (lookahead enabled, memory/ownership disabled)
 - [ ] Implement B5-Linear (replace score_fusion MLP with `score = w1*att + w2*own + w3*look`)
-- [ ] Verify all baselines have similar parameter counts (within ±10%)
-- [ ] Verify all baselines use same training protocol (optimizer, batch size, episodes)
+- [ ] Implement B-EdgeOff (disable edge feature encoder path)
+- [ ] Verify all implemented baselines use the same training protocol (optimizer, batch size, episodes)
+- [ ] Report parameter counts for transparency (do not enforce strict ±10% unless architecture-matching baselines are added)
 
 ### 1.2 Classical Heuristic Baselines
 
@@ -109,14 +118,14 @@ SPATIAL_DIST_TRAIN = 'uniform'                 # customers in [0,1]×[0,1]
 
 **Checklist:**
 - [ ] Generate 1000 test instances with fixed seed
-- [ ] Evaluate all baselines (B0-B5, COAST, H-Insert, H-Greedy)
+- [ ] Evaluate implemented baselines (B0, B1, B3, B5, B-EdgeOff, COAST, H-Insert, H-Greedy)
 - [ ] Report mean ± std across 5 training seeds for each model
 - [ ] Compute statistical significance (paired t-test, p<0.05)
 - [ ] Generate comparison table with confidence intervals
 - [ ] Highlight best result in each row (bold if statistically significant)
 
-**Expected Result (if H1-H4 hold):**
-- COAST should outperform B0-B5 by 5-15% on avg. cost
+**Expected Result (if H1'-H4' hold):**
+- COAST should outperform implemented ablations by 5-15% on avg. cost
 - COAST should match or exceed heuristics on feasibility
 - Ablations should show that removing any component degrades performance
 
@@ -135,7 +144,7 @@ SPATIAL_DIST_TRAIN = 'uniform'                 # customers in [0,1]×[0,1]
 - [ ] Measure forward pass time averaged over 1000 steps
 - [ ] Measure full episode time on instances of varying size (n=50,100,150)
 - [ ] Report GPU memory usage (if applicable)
-- [ ] Compare inference time: COAST vs. B4-Mono vs. H-Insert
+- [ ] Compare inference time: COAST vs. B5-Linear vs. H-Insert
 - [ ] Establish if COAST is real-time feasible (<50ms per decision)
 
 **Expected Result:**
@@ -145,10 +154,10 @@ SPATIAL_DIST_TRAIN = 'uniform'                 # customers in [0,1]×[0,1]
 
 ---
 
-## PHASE 3: HYPOTHESIS H1 - COORDINATION VALIDATION
+## PHASE 3: HYPOTHESIS H1' - COORDINATION VALIDATION
 
-### H1 Statement
-**"Coordination memory and ownership prediction reduce inter-vehicle conflicts."**
+### H1' Statement
+**"Ownership signal, when added on top of memory, improves coordination and reduces inter-vehicle conflicts."**
 
 ### 3.1 Conflict Metrics
 
@@ -162,7 +171,7 @@ SPATIAL_DIST_TRAIN = 'uniform'                 # customers in [0,1]×[0,1]
 | **Inter-Vehicle Distance Variance** | Variance of distances between simultaneously active vehicles | Track vehicle positions, compute variance over time |
 
 **Ablation Comparison:**
-Compare COAST vs. B0-None, B1-Memory, B2-Own
+Compare COAST vs. B1-Memory vs. B0-None
 
 **Checklist:**
 - [ ] Implement service region overlap metric (δ = 0.1 × problem scale)
@@ -171,15 +180,14 @@ Compare COAST vs. B0-None, B1-Memory, B2-Own
 - [ ] Log ownership probabilities $O_{ij}$ at each decision step
 - [ ] Compute entropy $H_j$ for all customers, report average
 - [ ] Track vehicle trajectories, compute distance variance over time
-- [ ] Generate comparison table: COAST vs. B0/B1/B2 on all conflict metrics
+- [ ] Generate comparison table: COAST vs. B0/B1 on all conflict metrics
 - [ ] Run paired statistical test for significance
 
-**Expected Result (if H1 holds):**
+**Expected Result (if H1' holds):**
 - COAST should have 18-24% lower service region overlap than B0-None
 - COAST should have 15-20% fewer vehicle switches per cluster than B0
 - Ownership entropy should be lower (more concentrated) for COAST
-- B1-Memory should show partial improvement (memory helps, but ownership matters)
-- B2-Own should show minimal improvement (ownership without history is weak)
+- B1-Memory should show partial improvement (memory helps, but ownership-on-top yields additional gains)
 
 ### 3.2 Qualitative Visualization
 
@@ -330,7 +338,7 @@ Compare COAST vs. B0-None, B3-Look
 | **Feasibility Drop** | Change in feasible solution rate vs. loose regime | % |
 
 **Ablation Comparison:**
-Compare COAST vs. B0-None (no edge features) vs. attention-only baseline
+Compare COAST vs. B-EdgeOff vs. B0-None
 
 **Checklist:**
 - [ ] Generate test sets with loose/medium/tight TW
@@ -370,10 +378,10 @@ Compare COAST vs. B0-None (no edge features) vs. attention-only baseline
 
 ---
 
-## PHASE 6: HYPOTHESIS H4 - GENERALIZATION VALIDATION
+## PHASE 6: HYPOTHESIS H4' - GENERALIZATION VALIDATION
 
-### H4 Statement
-**"Structured decomposition generalizes better than monolithic scoring under distribution shift."**
+### H4' Statement
+**"Structured multi-signal decomposition with nonlinear fusion generalizes better than simplified fusion baselines under distribution shift."**
 
 ### 6.1 Out-of-Distribution Test Regimes
 
@@ -400,18 +408,18 @@ Compare COAST vs. B0-None (no edge features) vs. attention-only baseline
 
 **Checklist:**
 - [ ] Generate 500 instances for each OOD regime with fixed seed
-- [ ] Evaluate all baselines (B0-B5, COAST) on all OOD regimes
+- [ ] Evaluate implemented baselines (B0, B1, B3, B5, B-EdgeOff, COAST) on all OOD regimes
 - [ ] Compute cost degradation for each model on each OOD
 - [ ] Compute feasibility drop for each model on each OOD
 - [ ] Generate OOD comparison table (models × OOD regimes)
 - [ ] Highlight which model degrades least on each OOD
 - [ ] Run statistical tests for significance
 
-**Expected Result (if H4 holds):**
+**Expected Result (if H4' holds):**
 - COAST cost degradation: 10-15% on average across OOD
-- B4-Mono cost degradation: 25-35% on average
-- COAST feasibility drop: <10%, B4-Mono: 20-30%
-- Structured decomposition (memory+ownership+lookahead) is key
+- B5-Linear cost degradation: higher than COAST on average
+- COAST feasibility drop: lower than B5-Linear and B0 on average
+- Structured decomposition + nonlinear fusion is key
 
 ### 6.2 Fine-Tuning vs. Zero-Shot Generalization
 
@@ -428,54 +436,48 @@ Compare COAST vs. B0-None (no edge features) vs. attention-only baseline
 - Sample efficiency (episodes to reach 95% of final performance)
 
 **Checklist:**
-- [ ] Evaluate COAST and B4-Mono zero-shot on OOD-Scale, OOD-Burst
+- [ ] Evaluate COAST and B5-Linear zero-shot on OOD-Scale, OOD-Burst
 - [ ] Fine-tune both models for 10k episodes on each OOD
 - [ ] Track learning curves during fine-tuning
 - [ ] Compute sample efficiency (episodes to 95%)
 - [ ] Generate learning curve plots
-- [ ] Compare zero-shot gap: COAST vs. B4-Mono
+- [ ] Compare zero-shot gap: COAST vs. B5-Linear
 
 **Expected Result:**
 - COAST zero-shot gap: 15-20%
-- B4-Mono zero-shot gap: 30-40%
+- B5-Linear zero-shot gap: higher than COAST
 - COAST fine-tunes faster (fewer episodes to 95%)
 
 ---
 
-## PHASE 7: ABLATION STUDIES (COMPREHENSIVE)
+## PHASE 7: ABLATION STUDIES (CURRENT-SCOPE)
 
-### 7.1 Ablation Matrix
+### 7.1 Ablation Matrix (Implemented)
 
 **Purpose:** Systematically test every component combination.
 
 | Ablation ID | Memory | Ownership | Lookahead | Edge Features | Fusion |
 |-------------|--------|-----------|-----------|---------------|--------|
-| **A0** | ✗ | ✗ | ✗ | ✗ | - |
-| **A1** | ✓ | ✗ | ✗ | ✗ | - |
-| **A2** | ✗ | ✓ | ✗ | ✗ | - |
-| **A3** | ✗ | ✗ | ✓ | ✗ | - |
-| **A4** | ✗ | ✗ | ✗ | ✓ | - |
-| **A5** | ✓ | ✓ | ✗ | ✗ | Linear |
-| **A6** | ✓ | ✗ | ✓ | ✗ | Linear |
-| **A7** | ✗ | ✓ | ✓ | ✗ | Linear |
-| **A8** | ✓ | ✓ | ✓ | ✗ | Linear |
-| **A9** | ✓ | ✓ | ✓ | ✓ | Linear |
+| **A0 (B0)** | ✗ | ✗ | ✗ | ✓ | Default |
+| **A1 (B1)** | ✓ | ✗ | ✗ | ✓ | Default |
+| **A3 (B3)** | ✗ | ✗ | ✓ | ✓ | Default |
+| **A4 (EdgeOff)** | ✓ | ✓ | ✓ | ✗ | MLP |
+| **A9 (B5)** | ✓ | ✓ | ✓ | ✓ | Linear |
 | **COAST** | ✓ | ✓ | ✓ | ✓ | MLP |
 
 **Checklist:**
-- [ ] Implement all 11 ablation variants
+- [ ] Implement current-scope ablations (A0, A1, A3, A4, A9, COAST)
 - [ ] Train each variant with 3 seeds (for efficiency)
 - [ ] Evaluate on in-distribution test set
 - [ ] Compute cost, feasibility, conflict rate, isolated regret
 - [ ] Generate ablation table with all metrics
 - [ ] Identify which components contribute most
-- [ ] Test interactions (e.g., does ownership help only with memory?)
+- [ ] Test interactions that are representable with implemented variants
 
 **Expected Result:**
-- Memory alone (A1) gives ~5% improvement
-- Ownership alone (A2) gives ~3% improvement
-- Lookahead alone (A3) gives ~6% improvement
-- Combinations (A5-A9) show additive or super-additive effects
+- Memory-only over B0 (A1 vs A0) gives measurable improvement
+- Lookahead-only over B0 (A3 vs A0) gives measurable improvement
+- Edge-off underperforms COAST, especially on tight constraints
 - MLP fusion (COAST) outperforms linear fusion (A9) by 2-4%
 
 ### 7.2 Sensitivity Analysis
@@ -526,6 +528,7 @@ Compare COAST vs. B0-None (no edge features) vs. attention-only baseline
 
 **Checklist:**
 - [ ] Log normalized scores at each decision
+- [ ] Restrict attribution analysis to implemented signals and variants
 - [ ] Classify decisions by dominant signal
 - [ ] Compute percentages
 - [ ] Analyze temporal patterns (early episode vs. late episode)
@@ -594,6 +597,9 @@ Compare COAST vs. B0-None (no edge features) vs. attention-only baseline
 - COAST outperforms Attention Model by 10-20% (dynamic adaptation)
 - COAST matches or exceeds POMO on feasibility
 - COAST has competitive runtime (<2× slower than lightweight baselines)
+
+**Interpretation Guardrail:**
+- Claims against literature baselines should be framed as empirical comparison, not direct validation of unimplemented B2/B4 mechanisms.
 
 ### 9.2 OR Solver Comparison
 
@@ -691,14 +697,14 @@ Compare COAST vs. B0-None (no edge features) vs. attention-only baseline
 - [ ] Runtime is practical (<50ms per decision)
 
 ### Hypothesis Validation
-- [ ] H1: Ownership reduces conflicts by 18-24% (p<0.05)
+- [ ] H1': Ownership-on-top-of-memory reduces conflicts vs memory-only (p<0.05)
 - [ ] H2: Lookahead reduces isolated customer regret by 10-15% (p<0.05)
 - [ ] H3: Edge features reduce TW violations by 15-25% under tight constraints (p<0.05)
-- [ ] H4: Decomposition retains 85-90% performance under OOD, vs. 70-80% for monolithic (p<0.05)
+- [ ] H4': Decomposition + MLP fusion retains higher OOD performance than linear/simple baselines (p<0.05)
 
 ### Ablations
-- [ ] All 11 ablation variants trained and evaluated
-- [ ] Ablation table shows additive/super-additive effects
+- [ ] All current-scope ablation variants trained and evaluated
+- [ ] Ablation table shows consistent component contributions within implemented scope
 - [ ] Sensitivity analysis confirms hyperparameter robustness
 
 ### Visualizations
@@ -716,12 +722,12 @@ Compare COAST vs. B0-None (no edge features) vs. attention-only baseline
 - [ ] README and documentation complete
 
 ### Writing
-- [ ] Abstract clearly states decomposition thesis
+- [ ] Abstract clearly states decomposition thesis and current experimental scope
 - [ ] Introduction frames coordination-anticipation entanglement problem
 - [ ] Method section emphasizes architectural principle over module details
-- [ ] Results section is hypothesis-driven (H1-H4)
-- [ ] Discussion addresses failure modes and limitations
-- [ ] Conclusion restates key finding: decomposition > monolithic
+- [ ] Results section is hypothesis-driven (H1'-H4')
+- [ ] Discussion addresses failure modes and implementation limitations (including deferred B2/B4)
+- [ ] Conclusion restates key finding within validated scope: decomposition + nonlinear fusion > simplified baselines
 
 ---
 

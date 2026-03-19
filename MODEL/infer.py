@@ -36,9 +36,10 @@ def parse_infer_args(argv = None):
 			help = "Path to a saved .pyth dataset file")
 	infer_parser.add_argument("--no-normalize", action = "store_true", default = False,
 			help = "Disable dataset normalization before inference")
-	infer_parser.add_argument("--greedy", action = "store_true", default = True,
+	decode_group = infer_parser.add_mutually_exclusive_group()
+	decode_group.add_argument("--greedy", action = "store_true", default = False,
 			help = "Use greedy decoding during inference")
-	infer_parser.add_argument("--sample", action = "store_true", default = False,
+	decode_group.add_argument("--sample", action = "store_true", default = False,
 			help = "Use sampling decoding instead of greedy")
 	infer_parser.add_argument("--stoch-rollouts", type = int, default = 100,
 			help = "Rollout count for stochastic problems (svrptw/sdvrptw)")
@@ -58,7 +59,7 @@ def parse_infer_args(argv = None):
 	args.data_csv = infer_args.data_csv
 	args.data_file = infer_args.data_file
 	args.no_normalize = infer_args.no_normalize
-	args.greedy = infer_args.greedy and not infer_args.sample
+	args.greedy = not infer_args.sample
 	args.sample = infer_args.sample
 	args.stoch_rollouts = infer_args.stoch_rollouts
 	args.max_print_instances = infer_args.max_print_instances
@@ -169,6 +170,12 @@ def _init_model(args, dataset_cls, env_cls, device):
 		latent_bottleneck = args.latent_bottleneck,
 		latent_tokens = args.latent_tokens,
 		latent_min_nodes = args.latent_min_nodes,
+		use_edge_features = args.use_edge_features,
+		use_memory = args.use_memory,
+		use_ownership = args.use_ownership,
+		use_lookahead = args.use_lookahead,
+		fusion_mode = args.fusion_mode,
+		linear_fusion_weights = args.linear_fusion_weights,
 	)
 	learner.to(device)
 	return learner
