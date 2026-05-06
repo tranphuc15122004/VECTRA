@@ -1,742 +1,874 @@
 # COAST Experimental Protocol: Hypothesis-Driven Validation
 
-**Purpose:** This document provides a complete experimental checklist to validate the four core hypotheses of COAST's structured decomposition approach for DVRPTW.
+## *(Updated — May 2026 — Implementation-Ready)*
 
-**Core Hypotheses (Reframed for Current Implementation):**
-- **H1':** Adding ownership signal on top of memory improves coordination and reduces inter-vehicle conflicts
-- **H2:** Candidate-conditioned lookahead reduces myopia and improves isolated customer handling
-- **H3:** Edge-aware scoring improves feasibility under tight constraints
-- **H4':** Structured multi-signal decomposition with nonlinear fusion generalizes better than simplified fusion baselines under distribution shift
+**Purpose:** This document provides a complete, executable experimental plan to validate the core hypotheses of COAST's structured decomposition approach for DVRPTW, targeting A* conference submission (AAAI/IJCAI/AAMAS).
 
-**Scope Note:**
-- The current codebase supports strong ablations for B0, B1, B3, B5, COAST, and edge-off variants.
-- Two originally planned baselines are not yet implemented in architecture-faithful form:
-   - **B2-Own (state-only ownership without memory history)**
-   - **B4-Mono (true monolithic scorer with matched parameter budget)**
-- Therefore, this protocol focuses on testable claims with currently implemented baselines and treats B2/B4 as future extensions.
+**Core Hypotheses:**
+
+- **H1:** Per-vehicle coordination memory + latent ownership reduces inter-vehicle conflicts vs. memory-only and no-memory baselines.
+- **H2:** Candidate-conditioned lookahead reduces greedy myopia and improves isolated-customer handling.
+- **H3:** Edge-aware scoring (8-feature edge encoder + CrossEdgeFusion) improves feasibility under tight time-window and capacity constraints.
+- **H4:** Structured multi-signal decomposition with non-linear (MLP) fusion generalizes better than linear fusion and monolithic baselines under distribution shift.
 
 ---
 
-## PHASE 1: BASELINE IMPLEMENTATION
+### ✅ Current Status Summary
 
-### 1.1 Baseline Models (Required)
+| Item | Status | Detail |
+|------|--------|--------|
+| **COAST (full model)** | ✅ Trained (1 seed) | `data/vectra/chkpt_best.pyth`, `layer=2, head=4, ff=256, model_size=128` |
+| **B0-None** | ✅ Trained (1 seed) | `data/_Ablation/B0/`, same backbone |
+| **B1-Memory** | ✅ Trained (1 seed) | `data/_Ablation/B1/`, same backbone |
+| **B3-Look** | ✅ Trained (1 seed) | `data/_Ablation/B3/`, same backbone |
+| **B5-Linear** | ✅ Trained (1 seed) | `data/_Ablation/B5/`, same backbone |
+| **B-EdgeOff** | ✅ Trained (1 seed) | `data/_Ablation/Edgeoff/`, same backbone |
+| **AM (Attention Model)** | ✅ Trained (1 seed) | `/home/admin_wsl/projects/RL4DVRPTW/data/_AM/`, `layer=5, head=8, ff=256` |
+| **PolyNet** | ✅ Trained (1 seed) | `/home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/`, `layer=5, head=8, ff=256` |
+| **MARDAM** | 🔧 Available | `/home/admin_wsl/projects/RL4DVRPTW/mdam/` (needs training) |
+| **Classical baselines** | ❌ Not yet | OR-Tools, Greedy NN need implementation |
+| **Multi-seed** | ❌ Not yet | All models currently 1 seed only |
+| **OOD evaluation** | ❌ Not yet | No out-of-distribution tests run |
+| **Behavioral analysis** | ❌ Not yet | No ownership/lookahead visualizations |
 
-**Purpose:** Establish fair comparison points that isolate different mechanisms.
+> **Critical note on fairness:** COAST and ALL internal ablations (B0, B1, B3, B5, EdgeOff) share the **identical backbone**: `layer=2, head=4, ff=256, model_size=128`. This is a fair comparison. AM and PolyNet use `layer=5, head=8` — they are **stronger-capacity literature baselines**, which is good: if COAST beats them with fewer parameters, the argument is stronger.
 
-| Baseline ID | Description | Components |
-|-------------|-------------|------------|
-| **B0-None** | No memory, no ownership, no lookahead | Attention + edge (default scorer), ownership/lookahead off |
-| **B1-Memory** | Memory only, no ownership head | Memory update on, ownership/lookahead off |
-| **B3-Look** | Lookahead only, no coordination | Lookahead + attention, memory/ownership off |
-| **B5-Linear** | Linear fusion | Replace MLP fusion with fixed weighted sum |
-| **B-EdgeOff** | No edge features | Same as COAST but edge encoder input disabled |
-| **COAST** | Full model | Memory + ownership + lookahead + MLP fusion |
+---
 
-**Deferred Baselines (Future Work):**
-- **B2-Own** (state-only ownership, no history memory)
-- **B4-Mono** (single monolithic scorer with parameter matching)
-
-**Implementation Checklist (Current Scope):**
-- [ ] Implement B0-None (memory/ownership/lookahead disabled)
-- [ ] Implement B1-Memory (memory enabled, ownership/lookahead disabled)
-- [ ] Implement B3-Look (lookahead enabled, memory/ownership disabled)
-- [ ] Implement B5-Linear (replace score_fusion MLP with `score = w1*att + w2*own + w3*look`)
-- [ ] Implement B-EdgeOff (disable edge feature encoder path)
-- [ ] Verify all implemented baselines use the same training protocol (optimizer, batch size, episodes)
-- [ ] Report parameter counts for transparency (do not enforce strict ±10% unless architecture-matching baselines are added)
-
-### 1.2 Classical Heuristic Baselines
-
-**Purpose:** Validate neural approaches against strong OR methods.
-
-| Heuristic ID | Description | Tool/Method |
-|--------------|-------------|-------------|
-| **H-Insert** | Sequential insertion heuristic | OR-Tools or custom |
-| **H-Greedy** | Greedy nearest neighbor | Custom implementation |
-| **H-Sweep** | Sweep algorithm with time windows | Custom implementation |
-| **H-LKH** | LKH3 with recourse (if applicable) | LKH3 binary |
-
-**Implementation Checklist:**
-- [ ] Implement/integrate insertion heuristic baseline
-- [ ] Implement greedy nearest-neighbor baseline
-- [ ] Integrate OR-Tools for comparison (if feasible)
-- [ ] Test heuristic baselines on same instance set
-- [ ] Report runtime for fairness (neural vs. heuristic)
-
-### 1.3 Training Configuration
-
-**Standardization:** All learned baselines use identical training setup.
+## ⚙️ FAIR BACKBONE — Áp dụng cho TẤT CẢ internal models
 
 ```python
-# Training Config (all models)
-OPTIMIZER = 'Adam'
-LEARNING_RATE = 1e-4
-BATCH_SIZE = 512
-TRAINING_EPISODES = 100_000
-BASELINE_TYPE = 'exponential_moving_average'  # for REINFORCE
-BASELINE_DECAY = 0.999
-ADVANTAGE_NORMALIZATION = True
-GRADIENT_CLIP = 1.0  # for stability
-SEEDS = [42, 123, 456, 789, 1024]  # 5 random seeds minimum
-
-# Training Data Distribution
-N_CUSTOMERS_TRAIN = [50, 60, 70, 80, 90, 100]  # sample uniformly
-M_VEHICLES_TRAIN = [3, 4, 5]                   # sample uniformly
-ARRIVAL_RATE_TRAIN = [0.1, 0.15, 0.2]          # Poisson λ per time unit
-TW_SLACK_TRAIN = [10, 15, 20]                  # uniform time window slack
-SPATIAL_DIST_TRAIN = 'uniform'                 # customers in [0,1]×[0,1]
+# Mọi model nội bộ (COAST, B0, B1, B3, B5, EdgeOff) dùng CHUNG:
+FAIR_BACKBONE = {
+    "model_size": 128,
+    "layer_count": 2,        # ← ĐÃ ĐƯỢC XÁC NHẬN: tất cả dùng 2
+    "head_count": 4,          # ← ĐÃ ĐƯỢC XÁC NHẬN: tất cả dùng 4
+    "ff_size": 256,           # ← ĐÃ ĐƯỢC XÁC NHẬN: tất cả dùng 256
+    "edge_feat_size": 8,
+    "cust_k": None,
+    "memory_size": 128,
+    "lookahead_hidden": 128,
+    "dropout": 0.1,
+    "tanh_xplor": 10,
+}
 ```
 
-**Reproducibility Checklist:**
-- [ ] Fix all random seeds (numpy, torch, env)
-- [ ] Set `torch.backends.cudnn.deterministic = True` for training
-- [ ] Log all hyperparameters to config file
-- [ ] Save model checkpoints every 10k episodes
-- [ ] Log training curve (avg return, policy loss, baseline loss) every 100 episodes
+**Training config chuẩn cho mọi model nội bộ:**
+
+```python
+TRAIN_CONFIG = {
+    "problem": "dvrptw",
+    "n_customers": 50,
+    "m_vehicles": 3,
+    "veh_capa": 200,
+    "veh_speed": 1,
+    "horizon": 480,
+    "tw_ratio": [0.25, 0.5, 0.75, 1.0],
+    "tw_range": [30, 91],
+    "deg_of_dyna": [0.1, 0.25, 0.5, 0.75],
+    "appear_early_ratio": [0.0, 0.5, 0.75, 1.0],
+    "dur_range": [10, 31],
+    "dem_range": [5, 41],
+    "loc_range": [0, 101],
+    "pending_cost": 2,
+    "late_cost": 1,
+    "epochs": 500,
+    "iter_count": 1000,
+    "batch_size": 512,
+    "lr": 1e-4,
+    "baseline_type": "critic",
+    "adv_norm": True,
+    "entropy_coef": 0.01,
+    "max_grad_norm": 2.0,
+    "amp": True,
+    "test_batch_size": 10240,
+}
+```
+
+**Ablation profiles (đã có sẵn trong `utils/_args.py`):**
+
+| Profile | `--ablation-profile` | Memory | Ownership | Lookahead | Edge | Fusion |
+|---------|---------------------|--------|-----------|-----------|------|--------|
+| COAST   | `vectra`            | ✓ | ✓ | ✓ | ✓ | MLP |
+| B0      | `b0`                | ✗ | ✗ | ✗ | ✓ | MLP |
+| B1      | `b1`                | ✓ | ✗ | ✗ | ✓ | MLP |
+| B3      | `b3`                | ✗ | ✗ | ✓ | ✓ | MLP |
+| B5      | `b5`                | ✓ | ✓ | ✓ | ✓ | Linear |
+| EdgeOff | `edgeoff`           | ✓ | ✓ | ✓ | ✗ | MLP |
 
 ---
 
-## PHASE 2: IN-DISTRIBUTION EVALUATION
-
-### 2.1 Primary Cost Metrics
-
-**Purpose:** Establish baseline performance on standard metrics.
-
-**Test Set:**
-- 1000 instances, generated with same distribution as training
-- Fixed seed for reproducibility
-- Evaluate in greedy mode (no sampling)
-
-**Metrics:**
-| Metric | Formula | Unit |
-|--------|---------|------|
-| Avg. Total Cost | $\frac{1}{N}\sum_{i=1}^N c_i$ | time/distance |
-| Std. Dev. Cost | $\sigma(c_1, \ldots, c_N)$ | time/distance |
-| Feasibility Rate | $\frac{\#\text{feasible}}{\#\text{total}}$ | % |
-| Avg. TW Violations | per violated customer | time units |
-| Avg. Capacity Violations | per violated vehicle | demand units |
-
-**Checklist:**
-- [ ] Generate 1000 test instances with fixed seed
-- [ ] Evaluate implemented baselines (B0, B1, B3, B5, B-EdgeOff, COAST, H-Insert, H-Greedy)
-- [ ] Report mean ± std across 5 training seeds for each model
-- [ ] Compute statistical significance (paired t-test, p<0.05)
-- [ ] Generate comparison table with confidence intervals
-- [ ] Highlight best result in each row (bold if statistically significant)
-
-**Expected Result (if H1'-H4' hold):**
-- COAST should outperform implemented ablations by 5-15% on avg. cost
-- COAST should match or exceed heuristics on feasibility
-- Ablations should show that removing any component degrades performance
-
-### 2.2 Runtime and Inference Speed
-
-**Purpose:** Ensure neural methods are practical for online deployment.
-
-**Metrics:**
-| Metric | Description | Unit |
-|--------|-------------|------|
-| Forward Pass Time | Per-step decision latency | ms |
-| Episode Time | Full instance solve time | seconds |
-| GPU Memory | Peak memory usage | GB |
-
-**Checklist:**
-- [ ] Measure forward pass time averaged over 1000 steps
-- [ ] Measure full episode time on instances of varying size (n=50,100,150)
-- [ ] Report GPU memory usage (if applicable)
-- [ ] Compare inference time: COAST vs. B5-Linear vs. H-Insert
-- [ ] Establish if COAST is real-time feasible (<50ms per decision)
-
-**Expected Result:**
-- COAST should achieve <50ms per decision for n≤100
-- Full episode should solve in <5 seconds for n=100
-- Trade-off analysis: cost improvement vs. latency increase
+## 📊 EXPERIMENTAL PLAN — 6 Phases, 8-10 Tuần
 
 ---
 
-## PHASE 3: HYPOTHESIS H1' - COORDINATION VALIDATION
+## PHASE 1: MULTI-SEED TRAINING (Tuần 1-3)
 
-### H1' Statement
-**"Ownership signal, when added on top of memory, improves coordination and reduces inter-vehicle conflicts."**
+### 1.1 Mục tiêu
 
-### 3.1 Conflict Metrics
+Train tất cả 6 internal models với **5 seeds** mỗi model = 30 runs, cùng backbone, cùng training config.
 
-**Metrics to Measure:**
+### 1.2 Model Matrix
 
-| Metric | Definition | How to Compute |
-|--------|------------|----------------|
-| **Service Region Overlap** | % of customers where multiple vehicles come within threshold | For each customer, count vehicles that visit within distance δ |
-| **Vehicle Switches per Cluster** | Avg. # of different vehicles serving same spatial cluster | Cluster customers by location, count unique vehicles per cluster |
-| **Ownership Concentration Entropy** | Shannon entropy of ownership distribution per customer | $H_j = -\sum_{i=1}^m O_{ij} \log O_{ij}$ |
-| **Inter-Vehicle Distance Variance** | Variance of distances between simultaneously active vehicles | Track vehicle positions, compute variance over time |
+| # | Model | Profile | Seeds cần train | Đã có |
+|---|-------|---------|-----------------|-------|
+| 1 | COAST | `vectra` | 42, 123, 456, 789, 1024 | seed=null (cần train lại với fixed seed) |
+| 2 | B0-None | `b0` | 42, 123, 456, 789, 1024 | seed=42 ✓ |
+| 3 | B1-Memory | `b1` | 42, 123, 456, 789, 1024 | seed=42 ✓ |
+| 4 | B3-Look | `b3` | 42, 123, 456, 789, 1024 | seed=42 ✓ |
+| 5 | B5-Linear | `b5` | 42, 123, 456, 789, 1024 | seed=42 (resumed) |
+| 6 | EdgeOff | `edgeoff` | 42, 123, 456, 789, 1024 | seed=42 (resumed) |
 
-**Ablation Comparison:**
-Compare COAST vs. B1-Memory vs. B0-None
+### 1.3 Lệnh train cho một model
 
-**Checklist:**
-- [ ] Implement service region overlap metric (δ = 0.1 × problem scale)
-- [ ] Implement clustering algorithm (k-means or DBSCAN on customer positions)
-- [ ] Track which vehicles serve which clusters, compute switch count
-- [ ] Log ownership probabilities $O_{ij}$ at each decision step
-- [ ] Compute entropy $H_j$ for all customers, report average
-- [ ] Track vehicle trajectories, compute distance variance over time
-- [ ] Generate comparison table: COAST vs. B0/B1 on all conflict metrics
-- [ ] Run paired statistical test for significance
+```bash
+# COAST (full model) — seed 42
+python MODEL/train.py \
+    --problem-type dvrptw \
+    --customers-count 50 --vehicles-count 3 \
+    --model-size 128 --layer-count 2 --head-count 4 --ff-size 256 \
+    --memory-size 128 --lookahead-hidden 128 \
+    --ablation-profile vectra \
+    --epoch-count 500 --iter-count 1000 --batch-size 512 \
+    --learning-rate 0.0001 --baseline-type critic --adv-norm \
+    --entropy-coef 0.01 --max-grad-norm 2.0 --amp \
+    --rng-seed 42 \
+    --output-dir output/ablation/coast/seed42
 
-**Expected Result (if H1' holds):**
-- COAST should have 18-24% lower service region overlap than B0-None
-- COAST should have 15-20% fewer vehicle switches per cluster than B0
-- Ownership entropy should be lower (more concentrated) for COAST
-- B1-Memory should show partial improvement (memory helps, but ownership-on-top yields additional gains)
+# B0 — seed 42
+python MODEL/train.py \
+    --problem-type dvrptw \
+    --customers-count 50 --vehicles-count 3 \
+    --model-size 128 --layer-count 2 --head-count 4 --ff-size 256 \
+    --ablation-profile b0 \
+    --epoch-count 500 --iter-count 1000 --batch-size 512 \
+    --learning-rate 0.0001 --baseline-type critic --adv-norm \
+    --entropy-coef 0.01 --max-grad-norm 2.0 --amp \
+    --rng-seed 42 \
+    --output-dir output/ablation/b0/seed42
 
-### 3.2 Qualitative Visualization
+# B1 — seed 42
+python MODEL/train.py \
+    --problem-type dvrptw \
+    --customers-count 50 --vehicles-count 3 \
+    --model-size 128 --layer-count 2 --head-count 4 --ff-size 256 \
+    --ablation-profile b1 \
+    --epoch-count 500 --iter-count 1000 --batch-size 512 \
+    --learning-rate 0.0001 --baseline-type critic --adv-norm \
+    --entropy-coef 0.01 --max-grad-norm 2.0 --amp \
+    --rng-seed 42 \
+    --output-dir output/ablation/b1/seed42
 
-**Purpose:** Show that ownership emerges as interpretable service regions.
+# B3 — seed 42
+python MODEL/train.py \
+    --problem-type dvrptw \
+    --customers-count 50 --vehicles-count 3 \
+    --model-size 128 --layer-count 2 --head-count 4 --ff-size 256 \
+    --ablation-profile b3 \
+    --epoch-count 500 --iter-count 1000 --batch-size 512 \
+    --learning-rate 0.0001 --baseline-type critic --adv-norm \
+    --entropy-coef 0.01 --max-grad-norm 2.0 --amp \
+    --rng-seed 42 \
+    --output-dir output/ablation/b3/seed42
 
-**Visualizations to Generate:**
+# B5 — seed 42
+python MODEL/train.py \
+    --problem-type dvrptw \
+    --customers-count 50 --vehicles-count 3 \
+    --model-size 128 --layer-count 2 --head-count 4 --ff-size 256 \
+    --ablation-profile b5 \
+    --epoch-count 500 --iter-count 2000 --batch-size 256 \
+    --learning-rate 0.0001 --baseline-type critic --adv-norm \
+    --entropy-coef 0.01 --max-grad-norm 2.0 --amp \
+    --rng-seed 42 \
+    --output-dir output/ablation/b5/seed42
 
-1. **Ownership Heatmap Over Time**
-   - X-axis: episode timestep
-   - Y-axis: customers
-   - Color: ownership probability for a chosen vehicle
-   - Shows how ownership concentrates/stabilizes over episode
+# EdgeOff — seed 42
+python MODEL/train.py \
+    --problem-type dvrptw \
+    --customers-count 50 --vehicles-count 3 \
+    --model-size 128 --layer-count 2 --head-count 4 --ff-size 256 \
+    --ablation-profile edgeoff \
+    --epoch-count 500 --iter-count 2000 --batch-size 256 \
+    --learning-rate 0.0001 --baseline-type critic --adv-norm \
+    --entropy-coef 0.01 --max-grad-norm 2.0 --amp \
+    --rng-seed 42 \
+    --output-dir output/ablation/edgeoff/seed42
+```
 
-2. **Spatial Ownership Map**
-   - Plot customer positions as points
-   - Color each customer by vehicle with highest ownership
-   - Overlay vehicle trajectories
-   - Shows emergent service regions
+> ⚠️ **Lưu ý:** B5 và EdgeOff hiện dùng `iter_count=2000, batch_size=256`. Nếu muốn chuẩn hóa hoàn toàn, đổi về `iter_count=1000, batch_size=512`. Tuy nhiên tổng số samples ≈ bằng nhau (500K) nên có thể giữ nguyên.
 
-3. **Memory Evolution t-SNE**
-   - Collect vehicle memory states $h_i$ over episode
-   - Project to 2D using t-SNE
-   - Color by vehicle ID
-   - Shows how memories diverge/cluster per vehicle
+### 1.4 Automation script
 
-**Checklist:**
-- [ ] Implement logging of $O_{ij}$ at each step
-- [ ] Generate ownership heatmap for 10 representative instances
-- [ ] Generate spatial ownership map for same instances
-- [ ] Collect memory states $h_i$, apply t-SNE, plot
-- [ ] Include visualizations in paper/appendix
-- [ ] Provide narrative interpretation (e.g., "Vehicle 0 claims eastern customers")
+Tạo file `script/train_all_seeds.sh`:
 
-**Expected Result:**
-- Clear spatial separation in ownership maps
-- Ownership heatmaps show stable regions (not random)
-- Memory t-SNE shows vehicle-specific clusters
+```bash
+#!/bin/bash
+MODELS=("vectra" "b0" "b1" "b3" "b5" "edgeoff")
+SEEDS=(42 123 456 789 1024)
 
----
+for profile in "${MODELS[@]}"; do
+    for seed in "${SEEDS[@]}"; do
+        echo "=== Training profile=$profile seed=$seed ==="
+        python MODEL/train.py \
+            --problem-type dvrptw \
+            --customers-count 50 --vehicles-count 3 \
+            --model-size 128 --layer-count 2 --head-count 4 --ff-size 256 \
+            --memory-size 128 --lookahead-hidden 128 \
+            --ablation-profile "$profile" \
+            --epoch-count 500 --iter-count 1000 --batch-size 512 \
+            --learning-rate 0.0001 --baseline-type critic --adv-norm \
+            --entropy-coef 0.01 --max-grad-norm 2.0 --amp \
+            --rng-seed "$seed" \
+            --output-dir "output/ablation/${profile}/seed${seed}"
+    done
+done
+```
 
-## PHASE 4: HYPOTHESIS H2 - ANTICIPATION VALIDATION
+### 1.5 Deliverables
 
-### H2 Statement
-**"Candidate-conditioned lookahead reduces myopia and improves isolated customer handling."**
-
-### 4.1 Isolated Customer Performance
-
-**Definition:** An "isolated customer" is one whose nearest neighbor distance exceeds 90th percentile of all pairwise distances.
-
-**Metrics:**
-
-| Metric | Definition | How to Compute |
-|--------|------------|----------------|
-| **Isolated Customer Regret** | Extra cost incurred on isolated customers vs. optimal timing | Run oracle that serves isolated customers at best time, compare |
-| **Late Service Rate on Isolated** | % of isolated customers served late (violating time window) | Track isolated customers, count violations |
-| **Detour Cost for Isolated** | Avg. extra distance traveled to/from isolated customers | Measure deviation from shortest path |
-
-**Ablation Comparison:**
-Compare COAST vs. B0-None, B3-Look
-
-**Checklist:**
-- [ ] Identify isolated customers in each test instance (90th percentile distance)
-- [ ] Compute regret: oracle serves isolated at optimal time, compare to model
-- [ ] Track late service rate specifically on isolated customers
-- [ ] Measure detour cost (distance traveled minus direct distance)
-- [ ] Generate comparison table: COAST vs. B0 vs. B3 on isolated metrics
-- [ ] Run significance test
-
-**Expected Result (if H2 holds):**
-- COAST should reduce isolated customer regret by 10-15% vs. B0
-- Late service rate on isolated should be 8-12% lower
-- Detour cost should decrease by 12-18%
-- B3-Look should show similar improvement (lookahead is key)
-
-### 4.2 Greedy Override Analysis
-
-**Purpose:** Measure how often lookahead corrects greedy-nearest choices.
-
-**Metrics:**
-
-| Metric | Definition | How to Compute |
-|--------|------------|----------------|
-| **Lookahead Intervention Rate** | % of decisions where lookahead changes the greedy choice | Compare $\arg\max(\alpha)$ vs. $\arg\max(\text{score})$ |
-| **Intervention Benefit** | Cost difference when lookahead overrides greedy | Track instances where lookahead intervened, compare outcomes |
-| **Greedy Failure Cases** | # of instances where greedy-only fails but lookahead succeeds | B0-greedy violates constraints, COAST does not |
-
-**Checklist:**
-- [ ] At each decision step, compute greedy choice $\arg\max(\alpha^{\text{att}})$
-- [ ] Compare to final choice $\arg\max(\text{score})$
-- [ ] Count interventions, compute rate
-- [ ] Track episodes where intervention occurred, measure cost delta
-- [ ] Identify cases where B0 fails feasibility but COAST succeeds
-- [ ] Generate intervention statistics table
-- [ ] Provide case study examples (visualize 2-3 instances)
-
-**Expected Result:**
-- Lookahead intervenes on 15-25% of decisions
-- Interventions yield 3-8% cost benefit on average
-- Greedy failures reduced by 20-30% with lookahead
-
-### 4.3 Lookahead Calibration Analysis
-
-**Purpose:** Verify lookahead scores are predictive of actual downstream cost.
-
-**Metrics:**
-
-| Metric | Definition | How to Compute |
-|--------|------------|----------------|
-| **Lookahead Correlation** | Pearson correlation between $\ell_j$ and actual future cost | Track predicted $\ell_j$ and realized cost after choosing $j$ |
-| **Calibration Error** | Mean squared error between $\ell_j$ and MC return | Compute MSE over all decisions |
-
-**Checklist:**
-- [ ] Log predicted lookahead $\ell_j$ for chosen customer at each step
-- [ ] Compute actual return (future cost from that step onward)
-- [ ] Compute correlation between predicted and actual
-- [ ] Compute calibration error (MSE)
-- [ ] Plot lookahead vs. actual cost scatter plot
-- [ ] Verify correlation is positive and significant (r > 0.5)
-
-**Expected Result:**
-- Correlation r ≈ 0.5-0.7 (strong enough to guide decisions)
-- Calibration error decreases during training
-- Lookahead is not perfect, but informative
+- [ ] 30 checkpoints trong `output/ablation/{profile}/seed{seed}/chkpt_best.pyth`
+- [ ] 30 training logs (`train_statistics.csv`)
+- [ ] Bảng GPU-hours consumed
+- [ ] Learning curves cho từng model (5 seeds overlaid)
 
 ---
 
-## PHASE 5: HYPOTHESIS H3 - EDGE-AWARENESS VALIDATION
+## PHASE 2: IN-DISTRIBUTION EVALUATION (Tuần 3-4)
 
-### H3 Statement
-**"Edge-aware scoring improves feasibility under tight constraints."**
+### 2.1 Test Set
 
-### 5.1 Constraint Violation Analysis
+```bash
+# Sinh test set 1000 instances, fixed seed 9999
+python script/gen_val_data.py \
+    --problem-type dvrptw \
+    --customers-count 50 --vehicles-count 3 \
+    --batch-size 1000 \
+    --rng-seed 9999 \
+    --output data/test_dvrptw_n50m3_1000.pyth
+```
 
-**Purpose:** Test model performance under increasingly tight constraints.
+### 2.2 Evaluation Script
 
-**Test Regimes:**
-1. **Loose TW:** time window slack = 20 time units
-2. **Medium TW:** slack = 10 time units
-3. **Tight TW:** slack = 5 time units
-4. **Capacity Stress:** vehicle capacity 0.8× normal
+Tạo file `script/eval_all_models.py`:
 
-**Metrics:**
+```python
+"""Evaluate all trained models on the test set."""
+import torch, os, json, sys
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
-| Metric | Definition | Unit |
-|--------|------------|------|
-| **TW Violation Rate** | % of customers served outside time window | % |
-| **Capacity Violation Rate** | % of vehicles exceeding capacity | % |
-| **Feasibility Drop** | Change in feasible solution rate vs. loose regime | % |
+from MODEL.model import VECTRA
+from problems import DVRPTW_Environment, DVRPTW_Dataset
+from utils import set_random_seed
+import numpy as np
 
-**Ablation Comparison:**
-Compare COAST vs. B-EdgeOff vs. B0-None
+TEST_DATA_PATH = "data/test_dvrptw_n50m3_1000.pyth"
+OUTPUT_DIR = "output/eval_results"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-**Checklist:**
-- [ ] Generate test sets with loose/medium/tight TW
-- [ ] Generate test set with reduced capacity
-- [ ] Evaluate all baselines on each regime
-- [ ] Track violation rates (TW, capacity)
-- [ ] Compute feasibility drop: (feasible_loose - feasible_tight) / feasible_loose
-- [ ] Generate comparison table across regimes
-- [ ] Test significance
+PROFILES = {
+    "COAST": "vectra",
+    "B0-None": "b0",
+    "B1-Memory": "b1", 
+    "B3-Look": "b3",
+    "B5-Linear": "b5",
+    "EdgeOff": "edgeoff",
+}
 
-**Expected Result (if H3 holds):**
-- COAST maintains <5% violation rate even in tight regime
-- B0-None has 15-25% violation rate in tight regime
-- Feasibility drop for COAST is 10-15%, for B0 is 30-40%
+def load_model(checkpoint_path, device):
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    args = checkpoint.get("args", {})
+    learner = VECTRA(
+        cust_feat_size=7,
+        veh_state_size=4,
+        model_size=args.get("model_size", 128),
+        layer_count=args.get("layer_count", 2),
+        head_count=args.get("head_count", 4),
+        ff_size=args.get("ff_size", 256),
+        tanh_xplor=args.get("tanh_xplor", 10),
+        greedy=True,
+        edge_feat_size=args.get("edge_feat_size", 8),
+        cust_k=args.get("cust_k"),
+        memory_size=args.get("memory_size", 128),
+        lookahead_hidden=args.get("lookahead_hidden", 128),
+        dropout=args.get("dropout", 0.1),
+        use_edge_features=args.get("use_edge_features", True),
+        use_memory=args.get("use_memory", True),
+        use_ownership=args.get("use_ownership", True),
+        use_lookahead=args.get("use_lookahead", True),
+        fusion_mode=args.get("fusion_mode", "mlp"),
+        linear_fusion_weights=args.get("linear_fusion_weights", (1.0, 1.0, 1.0)),
+    )
+    learner.load_state_dict(checkpoint["model"], strict=False)
+    learner.to(device)
+    learner.eval()
+    return learner
 
-### 5.2 Edge Feature Ablation
+def evaluate(learner, data, device):
+    env_params = [2, 1]  # pending_cost=2, late_cost=1
+    env = DVRPTW_Environment(data, None, None, *env_params)
+    env.nodes = env.nodes.to(device)
+    if env.init_cust_mask is not None:
+        env.init_cust_mask = env.init_cust_mask.to(device)
+    
+    with torch.no_grad():
+        _, _, rewards = learner(env)
+    costs = -torch.stack(rewards).sum(dim=0).squeeze(-1)
+    return costs.cpu()
 
-**Purpose:** Validate that edge features (distance, tw_slack, capacity_gap, etc.) contribute.
+def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    data = torch.load(TEST_DATA_PATH, map_location="cpu", weights_only=False)
+    
+    results = {}
+    for model_name, profile in PROFILES.items():
+        seeds = [42, 123, 456, 789, 1024]
+        all_costs = []
+        for seed in seeds:
+            ckpt_path = f"output/ablation/{profile}/seed{seed}/chkpt_best.pyth"
+            if not os.path.exists(ckpt_path):
+                print(f"  [SKIP] {ckpt_path} not found")
+                continue
+            learner = load_model(ckpt_path, device)
+            costs = evaluate(learner, data, device)
+            all_costs.append(costs)
+            print(f"  {model_name} seed={seed}: mean={costs.mean():.4f} std={costs.std():.4f}")
+        
+        if all_costs:
+            stacked = torch.stack(all_costs)
+            results[model_name] = {
+                "mean": stacked.mean().item(),
+                "std": stacked.std().item(),
+                "per_seed_mean": stacked.mean(dim=1).tolist(),
+                "per_seed_std": stacked.std(dim=1).tolist(),
+            }
+    
+    with open(f"{OUTPUT_DIR}/in_dist_results.json", "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"\nResults saved to {OUTPUT_DIR}/in_dist_results.json")
 
-**Ablations:**
-- Remove all edge features (use only node features)
-- Remove time window features (wait, late, slack)
-- Remove capacity features (cap_gap)
-- Remove spatial features (distance)
+if __name__ == "__main__":
+    main()
+```
 
-**Checklist:**
-- [ ] Implement edge-free baseline (no EdgeFeatureEncoder)
-- [ ] Implement ablations removing specific edge feature groups
-- [ ] Evaluate on tight-constraint test set
-- [ ] Measure violation rates and cost
-- [ ] Generate ablation table
+### 2.3 Primary Metrics Table
 
-**Expected Result:**
-- Removing TW features increases TW violations by 20-30%
-- Removing capacity features increases capacity violations by 15-25%
-- Removing spatial features degrades cost by 10-15%
+| Model | Cost (Mean ± Std) | Gap to COAST | Feasibility % | TW Viol. % |
+|-------|-------------------|--------------|---------------|------------|
+| COAST | — | — | — | — |
+| B0-None | — | — | — | — |
+| B1-Memory | — | — | — | — |
+| B3-Look | — | — | — | — |
+| B5-Linear | — | — | — | — |
+| EdgeOff | — | — | — | — |
 
----
+**Statistical tests:** Paired t-test (COAST vs each baseline), Bootstrap 95% CI, Cohen's d.
 
-## PHASE 6: HYPOTHESIS H4' - GENERALIZATION VALIDATION
+### 2.4 Deliverables
 
-### H4' Statement
-**"Structured multi-signal decomposition with nonlinear fusion generalizes better than simplified fusion baselines under distribution shift."**
-
-### 6.1 Out-of-Distribution Test Regimes
-
-**Training Distribution:** $n \in [50,100]$, $m \in [3,5]$, λ = 0.15, slack = 15
-
-**OOD Test Distributions:**
-
-| OOD ID | Shift Type | Config | Purpose |
-|--------|-----------|--------|---------|
-| **OOD-Scale** | More customers | $n = 150$ | Test capacity scaling |
-| **OOD-Fleet** | More vehicles | $m = 8$ | Test coordination scaling |
-| **OOD-Burst** | Bursty arrivals | λ varies [0.05, 0.4] | Test dynamic adaptation |
-| **OOD-Tight** | Tight time windows | slack = 3-5 | Test constraint handling |
-| **OOD-Cluster** | Clustered spatial | Gaussian mixture (4 clusters) | Test spatial structure change |
-| **OOD-Sparse** | Sparse spatial | Customers in [0,2]×[0,2] with gaps | Test long-distance routing |
-
-**Metrics:**
-
-| Metric | Definition | How to Compute |
-|--------|------------|----------------|
-| **Cost Degradation** | (Cost_OOD - Cost_train) / Cost_train | % |
-| **Feasibility Drop** | (Feasible_train - Feasible_OOD) / Feasible_train | % |
-| **Generalization Score** | 1 - (Cost_deg + Feas_drop)/2 | 0-1 scale |
-
-**Checklist:**
-- [ ] Generate 500 instances for each OOD regime with fixed seed
-- [ ] Evaluate implemented baselines (B0, B1, B3, B5, B-EdgeOff, COAST) on all OOD regimes
-- [ ] Compute cost degradation for each model on each OOD
-- [ ] Compute feasibility drop for each model on each OOD
-- [ ] Generate OOD comparison table (models × OOD regimes)
-- [ ] Highlight which model degrades least on each OOD
-- [ ] Run statistical tests for significance
-
-**Expected Result (if H4' holds):**
-- COAST cost degradation: 10-15% on average across OOD
-- B5-Linear cost degradation: higher than COAST on average
-- COAST feasibility drop: lower than B5-Linear and B0 on average
-- Structured decomposition + nonlinear fusion is key
-
-### 6.2 Fine-Tuning vs. Zero-Shot Generalization
-
-**Purpose:** Test if decomposition helps with transfer learning.
-
-**Protocol:**
-1. Evaluate zero-shot (no fine-tuning)
-2. Fine-tune for 10k episodes on OOD distribution
-3. Evaluate after fine-tuning
-
-**Metrics:**
-- Zero-shot performance
-- Fine-tuned performance
-- Sample efficiency (episodes to reach 95% of final performance)
-
-**Checklist:**
-- [ ] Evaluate COAST and B5-Linear zero-shot on OOD-Scale, OOD-Burst
-- [ ] Fine-tune both models for 10k episodes on each OOD
-- [ ] Track learning curves during fine-tuning
-- [ ] Compute sample efficiency (episodes to 95%)
-- [ ] Generate learning curve plots
-- [ ] Compare zero-shot gap: COAST vs. B5-Linear
-
-**Expected Result:**
-- COAST zero-shot gap: 15-20%
-- B5-Linear zero-shot gap: higher than COAST
-- COAST fine-tunes faster (fewer episodes to 95%)
-
----
-
-## PHASE 7: ABLATION STUDIES (CURRENT-SCOPE)
-
-### 7.1 Ablation Matrix (Implemented)
-
-**Purpose:** Systematically test every component combination.
-
-| Ablation ID | Memory | Ownership | Lookahead | Edge Features | Fusion |
-|-------------|--------|-----------|-----------|---------------|--------|
-| **A0 (B0)** | ✗ | ✗ | ✗ | ✓ | Default |
-| **A1 (B1)** | ✓ | ✗ | ✗ | ✓ | Default |
-| **A3 (B3)** | ✗ | ✗ | ✓ | ✓ | Default |
-| **A4 (EdgeOff)** | ✓ | ✓ | ✓ | ✗ | MLP |
-| **A9 (B5)** | ✓ | ✓ | ✓ | ✓ | Linear |
-| **COAST** | ✓ | ✓ | ✓ | ✓ | MLP |
-
-**Checklist:**
-- [ ] Implement current-scope ablations (A0, A1, A3, A4, A9, COAST)
-- [ ] Train each variant with 3 seeds (for efficiency)
-- [ ] Evaluate on in-distribution test set
-- [ ] Compute cost, feasibility, conflict rate, isolated regret
-- [ ] Generate ablation table with all metrics
-- [ ] Identify which components contribute most
-- [ ] Test interactions that are representable with implemented variants
-
-**Expected Result:**
-- Memory-only over B0 (A1 vs A0) gives measurable improvement
-- Lookahead-only over B0 (A3 vs A0) gives measurable improvement
-- Edge-off underperforms COAST, especially on tight constraints
-- MLP fusion (COAST) outperforms linear fusion (A9) by 2-4%
-
-### 7.2 Sensitivity Analysis
-
-**Purpose:** Test robustness to hyperparameter changes.
-
-**Hyperparameters to Vary:**
-- Memory size: [64, 128, 256]
-- Lookahead hidden size: [64, 128, 256]
-- Number of attention heads: [4, 8, 16]
-- Fusion MLP depth: [2, 3, 4 layers]
-- Exploration amplitude (tanh_xplor): [5, 10, 20]
-
-**Checklist:**
-- [ ] For each hyperparameter, train 3 variants
-- [ ] Evaluate each variant on test set
-- [ ] Plot performance vs. hyperparameter value
-- [ ] Identify sweet spots and sensitivity
-- [ ] Report recommended hyperparameter ranges
-
-**Expected Result:**
-- Memory size: performance saturates at 128-256
-- Lookahead hidden: 128 is sufficient
-- Attention heads: 8 is optimal (4 too few, 16 no gain)
-- Fusion depth: 2-3 layers sufficient
-- Exploration: 10 is robust
+- [ ] Primary metrics table với mean ± std across 5 seeds
+- [ ] Significance annotations (* p<0.05, ** p<0.01, *** p<0.001)
+- [ ] Learning curves (cost vs epoch, 5 seeds overlaid per model)
+- [ ] Bar chart: cost comparison across all models with error bars
 
 ---
 
-## PHASE 8: BEHAVIORAL ANALYSIS
+## PHASE 3: CLASSICAL & LITERATURE BASELINES (Tuần 4-5)
 
-### 8.1 Decision Attribution
+### 3.1 Classical Baselines
 
-**Purpose:** Understand which signal (attention, ownership, lookahead) dominates in different scenarios.
+#### 3.1.1 Greedy Nearest Neighbor
 
-**Method:**
-- At each decision step, record $\bar{\alpha}$, $\bar{\beta}$, $\bar{\ell}$ (normalized scores)
-- Compute contribution weights from MLP fusion gradient or sensitivity
-- Categorize decisions by dominant signal
+Đã có sẵn trong `baselines/_near_nb.py`. Đánh giá:
 
-**Metrics:**
+```bash
+python script/eval_baselines_dyn.py \
+    --problem-type dvrptw \
+    --data-file data/test_dvrptw_n50m3_1000.pyth \
+    --baseline near_nb
+```
 
-| Metric | Definition |
-|--------|------------|
-| Attention-Dominated | % decisions where $|\bar{\alpha}| > |\bar{\beta}| + |\bar{\ell}|$ |
-| Ownership-Dominated | % decisions where $|\bar{\beta}| > |\bar{\alpha}| + |\bar{\ell}|$ |
-| Lookahead-Dominated | % decisions where $|\bar{\ell}| > |\bar{\alpha}| + |\bar{\beta}|$ |
+#### 3.1.2 OR-Tools Insertion Heuristic
 
-**Checklist:**
-- [ ] Log normalized scores at each decision
-- [ ] Restrict attribution analysis to implemented signals and variants
-- [ ] Classify decisions by dominant signal
-- [ ] Compute percentages
-- [ ] Analyze temporal patterns (early episode vs. late episode)
-- [ ] Analyze spatial patterns (clustered vs. isolated customers)
-- [ ] Generate pie chart or bar chart of signal dominance
+Tạo file `script/eval_ortools.py`:
 
-**Expected Result:**
-- Attention dominates ~50% of decisions (base compatibility)
-- Ownership dominates ~25% (conflict situations)
-- Lookahead dominates ~25% (isolated/difficult customers)
-- Early episode: ownership matters more (coordination setup)
-- Late episode: lookahead matters more (optimization phase)
+```python
+"""Evaluate OR-Tools on DVRPTW test set."""
+import torch, os, sys, json
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
-### 8.2 Failure Mode Analysis
+from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
-**Purpose:** Identify when COAST fails and why.
+def solve_instance_ortools(nodes, veh_count, veh_capa, veh_speed, time_limit_sec=10):
+    """Solve a single DVRPTW instance with OR-Tools.
+    
+    Since DVRPTW is dynamic, we solve the STATIC version with all customers known.
+    This gives an UPPER BOUND on what's achievable in the dynamic setting.
+    """
+    n = nodes.size(0)  # depot + customers
+    depot = 0
+    
+    # Create routing model
+    manager = pywrapcp.RoutingIndexManager(n, veh_count, depot)
+    routing = pywrapcp.RoutingModel(manager)
+    
+    # Distance callback
+    def distance_callback(from_idx, to_idx):
+        from_node = manager.IndexToNode(from_idx)
+        to_node = manager.IndexToNode(to_idx)
+        return int(torch.norm(nodes[from_node, :2] - nodes[to_node, :2]).item() * 1000)
+    
+    dist_cb = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(dist_cb)
+    
+    # Demand constraint
+    def demand_callback(idx):
+        return int(nodes[manager.IndexToNode(idx), 2].item())
+    
+    demand_cb = routing.RegisterUnaryTransitCallback(demand_callback)
+    routing.AddDimensionWithVehicleCapacity(demand_cb, 0, [int(veh_capa)]*veh_count, True, "Capacity")
+    
+    # Time window constraint
+    def time_callback(from_idx, to_idx):
+        from_node = manager.IndexToNode(from_idx)
+        to_node = manager.IndexToNode(to_idx)
+        dist = torch.norm(nodes[from_node, :2] - nodes[to_node, :2]).item()
+        travel_time = int(dist / veh_speed * 1000)
+        service_time = int(nodes[from_node, 5].item() * 1000) if from_node > 0 else 0
+        return travel_time + service_time
+    
+    time_cb = routing.RegisterTransitCallback(time_callback)
+    horizon = int(nodes[0, 4].item() * 1000)  # depot tw_end as horizon
+    routing.AddDimension(time_cb, horizon, horizon, False, "Time")
+    time_dim = routing.GetDimensionOrDie("Time")
+    
+    for i in range(1, n):
+        idx = manager.NodeToIndex(i)
+        tw_start = int(nodes[i, 3].item() * 1000)
+        tw_end = int(nodes[i, 4].item() * 1000)
+        time_dim.CumulVar(idx).SetRange(tw_start, tw_end)
+    
+    # Search parameters
+    search_params = pywrapcp.DefaultRoutingSearchParameters()
+    search_params.time_limit.seconds = time_limit_sec
+    search_params.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    )
+    
+    solution = routing.SolveWithParameters(search_params)
+    if not solution:
+        return float('inf')
+    
+    return solution.ObjectiveValue() / 1000.0  # convert back
 
-**Method:**
-- Select 50 worst-performing instances (highest cost vs. oracle)
-- Manually inspect ownership heatmaps, trajectories, lookahead scores
-- Categorize failure modes
 
-**Failure Categories:**
-1. Ownership collapse (all vehicles claim same region)
-2. Lookahead miscalibration (underestimates future cost)
-3. Edge feature misinterpretation (ignores tight constraints)
-4. Exploration failure (stuck in local optimum)
+def main():
+    data = torch.load("data/test_dvrptw_n50m3_1000.pyth", map_location="cpu", weights_only=False)
+    nodes = data.nodes  # N x L_c x 7
+    
+    costs = []
+    for i in range(len(nodes)):
+        cost = solve_instance_ortools(nodes[i], data.veh_count, data.veh_capa, data.veh_speed)
+        costs.append(cost)
+        print(f"Instance {i}: OR-Tools cost = {cost:.4f}")
+    
+    costs_t = torch.tensor(costs)
+    print(f"\nOR-Tools: mean={costs_t.mean():.4f} std={costs_t.std():.4f}")
+    
+    with open("output/eval_results/ortools_results.json", "w") as f:
+        json.dump({"mean": costs_t.mean().item(), "std": costs_t.std().item(), "costs": costs}, f, indent=2)
 
-**Checklist:**
-- [ ] Identify 50 worst instances
-- [ ] Generate full diagnostic output (ownership, lookahead, edge scores)
-- [ ] Manually review and categorize failures
-- [ ] Compute distribution of failure modes
-- [ ] Provide 2-3 detailed case studies
-- [ ] Propose mitigation strategies for each failure mode
+if __name__ == "__main__":
+    main()
+```
 
-**Expected Result:**
-- Most common failure: lookahead miscalibration (30-40% of failures)
-- Second: ownership collapse under high competition (20-30%)
-- Third: edge feature misinterpretation under extreme TW (15-25%)
-- Strategies: better lookahead supervision, ownership regularization, edge attention weighting
+> ⚠️ **Quan trọng:** OR-Tools giải STATIC version (biết trước tất cả khách hàng) → đây là **lower bound** (optimistic). DVRPTW là dynamic nên chi phí thực tế sẽ cao hơn. Cần ghi rõ điều này trong paper.
 
----
+### 3.2 Literature Neural Baselines
 
-## PHASE 9: COMPARISON WITH STATE-OF-THE-ART
+#### 3.2.1 AM (Attention Model — Kool et al. 2019)
 
-### 9.1 Literature Baselines
+Checkpoint: `/home/admin_wsl/projects/RL4DVRPTW/data/_AM/chkpt_best.pyth`
+Config: `layer=5, head=8, ff=256` (mạnh hơn COAST về capacity)
 
-**Purpose:** Position COAST relative to published methods.
+Đánh giá:
 
-**Methods to Compare (if code/data available):**
-- Attention Model (Kool et al. 2019)
-- POMO (Kwon et al. 2020)
-- RL4CO baselines (if DVRPTW variants exist)
-- MARDAM (if ancestor codebase)
+```bash
+python script/eval_literature_baselines.py \
+    --model-type am \
+    --checkpoint /home/admin_wsl/projects/RL4DVRPTW/data/_AM/chkpt_best.pyth \
+    --test-data data/test_dvrptw_n50m3_1000.pyth \
+    --output output/eval_results/am_results.json
+```
 
-**Checklist:**
-- [ ] Obtain code/checkpoints for each baseline (or reimplement)
-- [ ] Evaluate on same test set as COAST
-- [ ] Ensure fair comparison (same input format, no oracle info)
-- [ ] Report cost, feasibility, runtime
-- [ ] Generate comparison table with literature baselines
-- [ ] Highlight COAST improvements
+#### 3.2.2 PolyNet
 
-**Expected Result:**
-- COAST outperforms Attention Model by 10-20% (dynamic adaptation)
-- COAST matches or exceeds POMO on feasibility
-- COAST has competitive runtime (<2× slower than lightweight baselines)
+Checkpoint: `/home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/chkpt_best.pyth`
+Config: `layer=5, head=8, ff=256` + k-NN sparsification
 
-**Interpretation Guardrail:**
-- Claims against literature baselines should be framed as empirical comparison, not direct validation of unimplemented B2/B4 mechanisms.
+```bash
+python script/eval_literature_baselines.py \
+    --model-type polynet \
+    --checkpoint /home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/chkpt_best.pyth \
+    --test-data data/test_dvrptw_n50m3_1000.pyth \
+    --output output/eval_results/polynet_results.json
+```
 
-### 9.2 OR Solver Comparison
+> ⚠️ **Lưu ý về fairness:** AM và PolyNet dùng `layer=5, head=8` (nhiều tham số hơn COAST). Nếu COAST thắng → argument rất mạnh. Nếu AM/Polynet thắng → COAST ít nhất là competitive với ít tham số hơn.
 
-**Purpose:** Validate that learning-based approach is practical.
+### 3.3 Comparison Table (All Baselines)
 
-**Solvers:**
-- OR-Tools with insertion and local search
-- Gurobi/CPLEX (if model as MILP)
-- LKH3 (if time-window variant exists)
+| Model | Type | Params | Cost | Gap | Feas. % | Time/step |
+|-------|------|--------|------|-----|---------|-----------|
+| OR-Tools (static LB) | Classical | — | — | — | 100% | ~10s |
+| Greedy NN | Classical | — | — | — | — | <1ms |
+| AM (Kool et al.) | Neural | ~X | — | — | — | — |
+| PolyNet | Neural | ~X | — | — | — | — |
+| B0-None | Ablation | — | — | — | — | — |
+| B1-Memory | Ablation | — | — | — | — | — |
+| B3-Look | Ablation | — | — | — | — | — |
+| B5-Linear | Ablation | — | — | — | — | — |
+| EdgeOff | Ablation | — | — | — | — | — |
+| **COAST** | **Ours** | — | — | — | — | — |
 
-**Checklist:**
-- [ ] Integrate OR-Tools insertion heuristic
-- [ ] Run on same test set with time limits (1s, 10s, 60s)
-- [ ] Compare cost at each time limit
-- [ ] Report anytime performance curves
-- [ ] Analyze when neural is better (small instances, tight time?) vs. OR (large instances, loose time?)
+### 3.4 Deliverables
 
-**Expected Result:**
-- COAST beats OR-Tools at <1s time limit
-- OR-Tools catches up or exceeds at 10s+ time limit
-- COAST is preferable for time-critical online scenarios
-
----
-
-## PHASE 10: REPRODUCIBILITY AND RELEASE
-
-### 10.1 Code and Data Release
-
-**Checklist:**
-- [ ] Clean and document all code
-- [ ] Provide requirements.txt or conda environment
-- [ ] Include training scripts with all hyperparameters
-- [ ] Include evaluation scripts for all metrics
-- [ ] Provide pretrained checkpoints for COAST and baselines
-- [ ] Provide test data splits (in-distribution and OOD)
-- [ ] Provide visualization scripts for ownership, lookahead, trajectories
-- [ ] Write README with quickstart instructions
-- [ ] Add LICENSE file
-- [ ] Publish to GitHub (preferred) or paper supplementary
-
-### 10.2 Reproducibility Checklist
-
-**Ensures results can be replicated:**
-- [ ] All random seeds documented
-- [ ] Exact PyTorch/CUDA versions specified
-- [ ] Training logs included
-- [ ] Evaluation logs included
-- [ ] Intermediate checkpoints available
-- [ ] Verification script that runs mini-experiment (10 episodes, <5 min)
-- [ ] Expected output documented (cost within ±2% of reported)
-
-### 10.3 Ethical and Practical Considerations
-
-**Checklist:**
-- [ ] Discuss computational cost (GPU hours for training)
-- [ ] Discuss carbon footprint (if relevant)
-- [ ] Discuss limitations (when COAST fails, when to use OR instead)
-- [ ] Discuss societal impact (logistics optimization → emissions, labor)
-- [ ] Discuss dual-use concerns (if applicable)
-
----
-
-## TIMELINE AND MILESTONES
-
-**Recommended Execution Order:**
-
-| Week | Phase | Deliverable |
-|------|-------|-------------|
-| 1-2 | Phase 1 | All baselines implemented and trained (5 seeds) |
-| 3 | Phase 2 | In-distribution evaluation complete, primary metrics table |
-| 4 | Phase 3 | H1 validation complete, conflict metrics + visualizations |
-| 5 | Phase 4 | H2 validation complete, isolated customer analysis + case studies |
-| 6 | Phase 5 | H3 validation complete, edge-awareness ablation |
-| 7-8 | Phase 6 | H4 validation complete, OOD generalization results |
-| 9 | Phase 7 | Full ablation study and sensitivity analysis |
-| 10 | Phase 8 | Behavioral analysis, failure mode study |
-| 11 | Phase 9 | Literature and OR baseline comparisons |
-| 12 | Phase 10 | Code release, reproducibility verification |
-
-**Critical Milestones:**
-- **End of Week 3:** Confirm COAST significantly outperforms B0-None
-- **End of Week 6:** Confirm H1 and H2 (coordination and anticipation work)
-- **End of Week 8:** Confirm H4 (generalization advantage)
-- **End of Week 12:** Paper-ready figures, tables, and code release
+- [ ] Full comparison table (neural + classical)
+- [ ] OR-Tools anytime performance curve
+- [ ] Inference latency comparison
+- [ ] Parameter count table
 
 ---
 
-## SUMMARY CHECKLIST
+## PHASE 4: HYPOTHESIS VALIDATION (Tuần 5-7)
 
-**Before Paper Submission, Verify:**
+### 4.1 H1 — Coordination Validation
 
-### Primary Results
-- [ ] COAST outperforms all baselines on in-distribution cost (with significance)
-- [ ] COAST maintains high feasibility (>95%)
-- [ ] Runtime is practical (<50ms per decision)
+**So sánh:** COAST vs B1-Memory vs B0-None
 
-### Hypothesis Validation
-- [ ] H1': Ownership-on-top-of-memory reduces conflicts vs memory-only (p<0.05)
-- [ ] H2: Lookahead reduces isolated customer regret by 10-15% (p<0.05)
-- [ ] H3: Edge features reduce TW violations by 15-25% under tight constraints (p<0.05)
-- [ ] H4': Decomposition + MLP fusion retains higher OOD performance than linear/simple baselines (p<0.05)
+**Metrics to compute:**
 
-### Ablations
-- [ ] All current-scope ablation variants trained and evaluated
-- [ ] Ablation table shows consistent component contributions within implemented scope
-- [ ] Sensitivity analysis confirms hyperparameter robustness
+```python
+# Trong script/eval_coordination.py
 
-### Visualizations
-- [ ] Ownership heatmaps (10 instances)
-- [ ] Spatial ownership maps (10 instances)
-- [ ] Memory t-SNE plots
-- [ ] Greedy override case studies (2-3 instances)
-- [ ] Learning curves (in-dist and fine-tuning)
-- [ ] OOD generalization plots
+def compute_ownership_entropy(owner_probs, cust_mask=None):
+    """H = -sum(p_i * log(p_i)) — lower = more decisive"""
+    p = owner_probs.clamp_min(1e-9)
+    entropy = -(p * p.log()).sum(dim=1)  # sum over vehicles
+    if cust_mask is not None:
+        entropy = entropy.masked_fill(cust_mask, 0)
+    return entropy.mean()
 
-### Reproducibility
-- [ ] All code and data released
-- [ ] Pretrained checkpoints available
-- [ ] Verification script passes on fresh environment
-- [ ] README and documentation complete
+def compute_service_region_overlap(routes, customer_positions, threshold=0.1):
+    """% customers with >= 2 vehicles within threshold distance"""
+    overlap_count = 0
+    total = 0
+    for instance_routes, positions in zip(routes, customer_positions):
+        for c in range(1, len(positions)):  # skip depot
+            vehicles_nearby = 0
+            for route in instance_routes:
+                if any(torch.norm(positions[c] - positions[node], p=2) < threshold 
+                       for node in route if node > 0 and node < len(positions)):
+                    vehicles_nearby += 1
+            if vehicles_nearby >= 2:
+                overlap_count += 1
+            total += 1
+    return overlap_count / total if total > 0 else 0
 
-### Writing
-- [ ] Abstract clearly states decomposition thesis and current experimental scope
-- [ ] Introduction frames coordination-anticipation entanglement problem
-- [ ] Method section emphasizes architectural principle over module details
-- [ ] Results section is hypothesis-driven (H1'-H4')
-- [ ] Discussion addresses failure modes and implementation limitations (including deferred B2/B4)
-- [ ] Conclusion restates key finding within validated scope: decomposition + nonlinear fusion > simplified baselines
+def compute_vehicle_switches_per_cluster(routes, customer_positions, n_clusters=None):
+    """K-means cluster customers, count unique vehicles per cluster"""
+    from sklearn.cluster import KMeans
+    # ... implementation
+```
+
+**Deliverables:**
+
+- [ ] Bảng H1 metrics: COAST vs B1 vs B0
+- [ ] Ownership heatmap (heatmap theo timestep × customer)
+- [ ] Spatial ownership map (vị trí khách, color theo xe có ownership cao nhất)
+- [ ] Memory t-SNE plot
+
+### 4.2 H2 — Anticipation Validation
+
+**So sánh:** COAST vs B3-Look vs B0-None
+
+**Metrics to compute:**
+
+```python
+# Trong script/eval_anticipation.py
+
+def identify_isolated_customers(customer_positions, percentile=90):
+    """Customers whose nearest neighbor distance > p-th percentile"""
+    dists = torch.cdist(customer_positions, customer_positions)
+    dists.fill_diagonal_(float('inf'))
+    nn_dists = dists.min(dim=-1).values
+    threshold = torch.quantile(nn_dists, percentile / 100)
+    return nn_dists > threshold
+
+def compute_lookahead_intervention_rate(att_scores, final_scores, masks):
+    """% steps where argmax(att_score) != argmax(final_score)"""
+    att_choice = att_scores.argmax(dim=-1)
+    final_choice = final_scores.argmax(dim=-1)
+    interventions = (att_choice != final_choice).float()
+    # Exclude fully masked steps
+    valid = (~masks.all(dim=-1)).float()
+    return (interventions * valid).sum() / valid.sum().clamp_min(1)
+
+def compute_lookahead_calibration(lookahead_scores, actual_future_costs):
+    """Pearson correlation between predicted and actual"""
+    from scipy.stats import pearsonr
+    l = lookahead_scores.cpu().numpy().flatten()
+    a = actual_future_costs.cpu().numpy().flatten()
+    return pearsonr(l, a)
+```
+
+**Deliverables:**
+
+- [ ] Bảng H2 metrics: COAST vs B3 vs B0
+- [ ] Lookahead vs actual cost scatter plot
+- [ ] Intervention case study (2-3 instances với route visualization)
+- [ ] Intervention rate over episode timeline
+
+### 4.3 H3 — Edge-Awareness Validation
+
+**So sánh:** COAST vs EdgeOff vs B0-None
+
+**Test regimes:**
+
+1. Loose TW: `tw_range=[60, 120]`
+2. Medium TW: `tw_range=[30, 91]` (train distribution)
+3. Tight TW: `tw_range=[10, 40]`
+4. Capacity stress: `veh_capa=150` (thay vì 200)
+
+**Deliverables:**
+
+- [ ] Bảng H3: TW violation rate × constraint tightness
+- [ ] Capacity violation rate
+- [ ] Feasibility drop curve
+
+### 4.4 H4 — Generalization Validation
+
+**Train:** n=50, m=3
+**Test OOD:**
+
+| OOD Regime | Config | Purpose |
+|-----------|--------|---------|
+| OOD-Scale | n=100, m=5 | Larger instances |
+| OOD-Fleet | n=50, m=6 | More vehicles |
+| OOD-Tight | tw_range=[10,40] | Tight time windows |
+| OOD-Burst | deg_of_dyna=[0.5,0.75,1.0] | Highly dynamic |
+| OOD-Sparse | loc_range=[0,201] | Sparse spatial |
+
+**Deliverables:**
+
+- [ ] OOD degradation table: (C_OOD - C_ID) / C_ID for each model × OOD regime
+- [ ] Generalization score heatmap
+- [ ] Bar chart: which model degrades least
 
 ---
 
-**END OF EXPERIMENTAL PROTOCOL**
+## PHASE 5: BEHAVIORAL ANALYSIS & VISUALIZATION (Tuần 7-8)
 
-**Next Steps:**
-1. Review this protocol with collaborators
-2. Prioritize experiments based on available compute
-3. Begin Phase 1 (baseline implementation)
-4. Report preliminary results after Phase 2
-5. Iterate on hypotheses if evidence is weak
-6. Prepare paper draft aligned with experimental findings
+### 5.1 Ownership Visualization Pipeline
+
+```python
+# script/vis_ownership.py — Pseudocode
+for instance in representative_instances:
+    # 1. Run COAST, log owner_probs at each step
+    owner_probs_over_time = []  # T x L_v x L_c
+    trajectories = []  # per-vehicle routes
+    
+    # 2. Spatial ownership map
+    fig, ax = plt.subplots()
+    colors = ['red', 'blue', 'green']  # one per vehicle
+    for c in customers:
+        dominant_veh = owner_probs[:, c].mean(0).argmax()
+        ax.scatter(c.x, c.y, color=colors[dominant_veh])
+    for veh_idx, route in enumerate(trajectories):
+        route_coords = [customer_positions[n] for n in route]
+        ax.plot(*zip(*route_coords), color=colors[veh_idx], alpha=0.5)
+    ax.set_title("Spatial Ownership Map — Instance X")
+    plt.savefig(f"figures/ownership_map_{instance}.pdf")
+    
+    # 3. Ownership heatmap over time
+    fig, ax = plt.subplots()
+    im = ax.imshow(owner_probs_for_veh0.T, aspect='auto', cmap='YlOrRd')
+    ax.set_xlabel("Timestep"); ax.set_ylabel("Customer")
+    plt.colorbar(im)
+    plt.savefig(f"figures/ownership_heatmap_{instance}.pdf")
+```
+
+### 5.2 Lookahead Intervention Case Study
+
+```python
+# script/vis_lookahead.py
+# For 2-3 instances, show:
+# - Map with customer positions
+# - COAST's route (colored per vehicle)
+# - B0's route (greedy, no lookahead)
+# - Highlight where COAST's lookahead changed the decision
+# - Table: cost comparison
+```
+
+### 5.3 Failure Mode Analysis
+
+Chọn 20 worst instances (COAST cost - OR-Tools cost lớn nhất). Phân loại:
+
+1. **Ownership collapse:** ≥80% customers assigned to 1 vehicle
+2. **Lookahead miscalibration:** |predicted - actual| > 2σ
+3. **Edge misinterpretation:** TW violations despite feasible alternatives
+4. **Exploration failure:** All vehicles return to depot early
+
+### 5.4 Deliverables
+
+- [ ] Spatial ownership maps (3-5 instances)
+- [ ] Ownership heatmaps (3-5 instances)
+- [ ] Memory t-SNE plot
+- [ ] Lookahead calibration scatter plot
+- [ ] Intervention case studies (2-3 instances)
+- [ ] Failure mode taxonomy pie chart
+
+---
+
+## PHASE 6: PAPER WRITING & RELEASE (Tuần 8-10)
+
+### 6.1 Paper Structure (8 pages + references)
+
+```
+1. Introduction (1.5p)
+   - DVRPTW: coordination + anticipation entanglement
+   - COAST: structured decomposition into ownership + lookahead
+   - Contributions: (1) decomposition framework, (2) coordination memory,
+     (3) candidate-conditioned lookahead, (4) empirical validation
+
+2. Related Work (1p)
+   - Neural VRP (AM, POMO, MDAM, PolyNet)
+   - Multi-agent coordination (CTDE, implicit communication)
+   - Value-based planning in routing
+
+3. Problem Formulation (0.75p)
+   - DVRPTW definition
+   - sMMDP: state, action, transition, reward
+   - Shared sequential policy
+
+4. Method: COAST (2p)
+   - Architecture overview (figure)
+   - Customer encoding: GraphEncoder + RBF
+   - Vehicle encoding: FleetEncoder (cross-attention)
+   - Coordination: CoordinationMemory + OwnershipHead
+   - Anticipation: EdgeFeatureEncoder + LookaheadHead
+   - Decision fusion: CrossEdgeFusion + ScoreFusion (MLP)
+   - Training: REINFORCE + critic baseline
+
+5. Experiments (2.5p)
+   - Setup: fair backbone, 5 seeds, metrics
+   - RQ1: In-distribution comparison (Table 1)
+   - RQ2: Does coordination reduce conflicts? (Table 2, Figure 3)
+   - RQ3: Does lookahead reduce myopia? (Table 3, Figure 4)
+   - RQ4: Does COAST generalize better? (Table 4, Figure 5)
+   - RQ5: Ablation & behavioral analysis
+
+6. Conclusion (0.25p)
+   - Structured decomposition improves DVRPTW routing
+   - Coordination + anticipation are orthogonal benefits
+   - Future: B2/B4 baselines, larger scale, real-world data
+```
+
+### 6.2 Figure Plan
+
+| Figure | Content | Phase |
+|--------|---------|-------|
+| Fig 1 | COAST architecture diagram | Writing |
+| Fig 2 | Learning curves (5 seeds × 6 models) | Phase 2 |
+| Fig 3 | Spatial ownership maps + heatmaps | Phase 5 |
+| Fig 4 | Lookahead calibration + intervention case | Phase 5 |
+| Fig 5 | OOD generalization bar chart | Phase 4 |
+| Fig 6 | Ablation contribution waterfall | Phase 4 |
+
+### 6.3 Table Plan
+
+| Table | Content | Phase |
+|-------|---------|-------|
+| Table 1 | Primary results: all models on in-dist test | Phase 2 |
+| Table 2 | H1 coordination metrics | Phase 4 |
+| Table 3 | H2 anticipation metrics | Phase 4 |
+| Table 4 | OOD generalization | Phase 4 |
+| Table 5 | Ablation matrix | Phase 4 |
+
+### 6.4 Reproducibility Checklist
+
+- [ ] GitHub repo với README rõ ràng
+- [ ] `requirements.txt` hoặc `environment.yml`
+- [ ] Pretrained checkpoints (COAST + all ablations, 5 seeds)
+- [ ] Test data splits
+- [ ] Evaluation script (`script/eval_all_models.py`)
+- [ ] Verification script (mini-run < 5 phút)
+- [ ] Training logs
+- [ ] Visualization scripts
+
+---
+
+## 📅 TIMELINE
+
+| Tuần | Phase | Key Deliverable |
+|------|-------|-----------------|
+| 1 | Phase 1 | Bắt đầu multi-seed training (COAST + B0 + B1) |
+| 2 | Phase 1 | Tiếp tục training (B3 + B5 + EdgeOff) |
+| 3 | Phase 1→2 | Training done → Bắt đầu evaluation |
+| 4 | Phase 2→3 | In-dist results + OR-Tools baseline |
+| 5 | Phase 3→4 | Literature baselines + Bắt đầu H1/H2 |
+| 6 | Phase 4 | H3/H4 validation + OOD evaluation |
+| 7 | Phase 4→5 | Behavioral analysis + visualizations |
+| 8 | Phase 5→6 | Final analysis + Bắt đầu viết paper |
+| 9 | Phase 6 | Paper draft hoàn chỉnh |
+| 10 | Phase 6 | Polish, release code, submit |
+
+---
+
+## 🖥️ RESOURCE ESTIMATION
+
+| Task | GPU-hours (1× RTX 4090) |
+|------|-------------------------|
+| 30 training runs (6 models × 5 seeds) | ~300h (12.5 days) |
+| Evaluation (all models, all regimes) | ~20h |
+| OR-Tools (CPU) | ~10h |
+| Behavioral analysis | ~10h |
+| **TOTAL** | **~340h (14 days)** |
+
+**Với 2 GPUs:** ~7 days. **Với 4 GPUs:** ~3.5 days.
+
+---
+
+## ✅ PRE-SUBMISSION FINAL CHECKLIST
+
+### Results
+
+- [ ] COAST outperforms ALL internal ablations (p<0.05) on in-dist cost
+- [ ] COAST competitive or better vs AM, PolyNet (despite fewer params)
+- [ ] COAST feasible >95% on in-distribution
+- [ ] COAST beats OR-Tools at <1s but OR-Tools catches up at >10s (expected)
+- [ ] H1: Ownership-on-memory reduces conflict metrics vs B1 and B0 (p<0.05)
+- [ ] H2: Lookahead reduces isolated regret and intervenes on 15-25% decisions
+- [ ] H3: Edge features reduce TW violations under tight constraints
+- [ ] H4: COAST generalizes better than B5-Linear and B0 on OOD
+
+### Paper Quality
+
+- [ ] Clear hypothesis-driven narrative (not a module laundry list)
+- [ ] Every claim backed by a specific table/figure
+- [ ] Statistical rigor: CI, p-values, effect sizes
+- [ ] Limitations section: B2/B4 not implemented, static OR-Tools bound, single problem size
+- [ ] All figures are vector format, readable at print size
+
+### Code
+
+- [ ] All training/evaluation/visualization scripts committed
+- [ ] README with quickstart (< 5 commands to reproduce key result)
+- [ ] Pretrained checkpoints downloadable
+- [ ] License file
+
+---
+
+**END OF UPDATED EXPERIMENTAL PROTOCOL**

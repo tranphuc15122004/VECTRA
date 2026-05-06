@@ -36,6 +36,7 @@ except ImportError:
 
 import os as _os
 for cand in [
+        "{}/LKH-3.0.6/LKH".format(_os.environ.get("PWD", ".")), 
         "./bin/LKH",
         _os.path.join(_os.environ.get("HOME", "~"), "LKH-3.0.5/LKH"),
         "/usr/local/bin/LKH",

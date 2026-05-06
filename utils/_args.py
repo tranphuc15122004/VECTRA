@@ -53,7 +53,7 @@ USE_OWNERSHIP = True
 USE_LOOKAHEAD = True
 FUSION_MODE = "mlp"
 LINEAR_FUSION_WEIGHTS = (1.0, 1.0, 1.0)
-ABLATION_PROFILE = "none"
+ABLATION_PROFILE = "vectra"
 
 EPOCH_COUNT = 20
 ITER_COUNT = 1000
@@ -100,8 +100,8 @@ def _apply_ablation_profile(args):
                 return args
 
         profiles = {
-                # full COAST-style model
-                "coast": {
+                # full vectra-style model
+                "vectra": {
                         "use_edge_features": True,
                         "use_memory": True,
                         "use_ownership": True,
@@ -267,7 +267,7 @@ def parse_args(argv = None):
     group.add_argument(
             "--ablation-profile",
             type = str,
-            choices = ["none", "coast", "b0", "b1", "b3", "b5", "edgeoff", "a0", "a1", "a3", "a4", "a9"],
+            choices = ["none", "vectra", "b0", "b1", "b3", "b5", "edgeoff", "a0", "a1", "a3", "a4", "a9"],
             default = ABLATION_PROFILE,
             help = "Apply a predefined ablation configuration with one flag",
     )
