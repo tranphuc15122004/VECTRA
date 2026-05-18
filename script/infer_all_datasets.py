@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
             "save per-case outputs plus aggregate summaries."
         )
     )
-    parser.add_argument("--datasets-root", type=Path, default=Path("data/datasets"))
+    parser.add_argument("--datasets-root", type=Path, default=Path("datasets"))
     parser.add_argument("--infer-script", type=Path, default=Path("MODEL/infer.py"))
     parser.add_argument(
         "--python-executable",

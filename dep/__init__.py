@@ -35,9 +35,12 @@ except ImportError:
     ORTOOLS_ENABLED = False
 
 import os as _os
+LKH_PWD = _os.environ.get("PWD", ".")
 for cand in [
-        "{}/LKH-3.0.6/LKH".format(_os.environ.get("PWD", ".")), 
+        "{}/LKH-3.0.9/LKH".format(LKH_PWD),
+        "{}/LKH-3.0.6/LKH".format(LKH_PWD),
         "./bin/LKH",
+        "{}/LKH".format(LKH_PWD),
         _os.path.join(_os.environ.get("HOME", "~"), "LKH-3.0.5/LKH"),
         "/usr/local/bin/LKH",
         "/usr/bin/LKH"

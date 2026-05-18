@@ -10,18 +10,17 @@ VEHICLES=${VEHICLES:-3}
 
 # ── Training schedule ─────────────────────────────────────────────────────────
 EPOCHS=${EPOCHS:-500}
-ITERS=${ITERS:-1000}
-BATCH=${BATCH:-512}
+ITERS=${ITERS:-2000}
+BATCH=${BATCH:-256}
 TEST_BATCH=${TEST_BATCH:-10240}
 LR=${LR:-1e-4}
 
 # ── Model architecture (matching train_vectra_main.sh) ───────────────────────
 MODEL_SIZE=${MODEL_SIZE:-128}
-LAYER_COUNT=${LAYER_COUNT:-3}
+LAYER_COUNT=${LAYER_COUNT:-2}
 HEAD_COUNT=${HEAD_COUNT:-4}
 FF_SIZE=${FF_SIZE:-256}
 EDGE_FEAT_SIZE=${EDGE_FEAT_SIZE:-8}
-CUST_K=${CUST_K:-20}
 MEMORY_SIZE=${MEMORY_SIZE:-128}
 LOOKAHEAD_HIDDEN=${LOOKAHEAD_HIDDEN:-128}
 DROPOUT=${DROPOUT:-0.1}
@@ -105,7 +104,6 @@ PYTHONPATH=. "$PYTHON_BIN" MODEL/train.py \
 	--head-count        "$HEAD_COUNT" \
 	--ff-size           "$FF_SIZE" \
 	--edge-feat-size    "$EDGE_FEAT_SIZE" \
-	--cust-k            "$CUST_K" \
 	--memory-size       "$MEMORY_SIZE" \
 	--lookahead-hidden  "$LOOKAHEAD_HIDDEN" \
 	--dropout           "$DROPOUT" \

@@ -82,22 +82,28 @@ def main(args):
     print(f"OR-Tools completed in {solve_time:.4f} seconds.")
 
     # ---- evaluate routes -------------------------------------------------
-    costs = _replay_routes_cost(data, env_cls, env_params, routes, rollouts=1)
-    raw_replay_costs = _replay_routes_cost(
-        raw_data, env_cls, env_params, routes, rollouts=args.verify_rollouts
-    )
-    route_diagnostics = [
-        _route_diag_for_instance(data, routes, idx)
-        for idx in range(len(routes))
-    ]
-    total_skipped = sum(d["missing_count"] for d in route_diagnostics)
-    constraint_diagnostics = _check_route_constraints(raw_data, routes)
+    # Use static cost components (same as LKH inference); dynamic replay via
+    # eval_apriori_routes is broken for DVRPTW because _keep_alive_until_reveal
+    # interferes with vehicle ordering and inflates costs.
     raw_cost_components = _compute_cost_components(
         raw_data, routes, args.pending_cost, args.late_cost
     )
     normalized_cost_components = _compute_cost_components(
         data, routes, args.pending_cost, args.late_cost
     )
+    costs = data.nodes.new_tensor(
+        [c["total_cost"] for c in normalized_cost_components]
+    )
+    raw_replay_costs = raw_data.nodes.new_tensor(
+        [c["total_cost"] for c in raw_cost_components]
+    )
+
+    route_diagnostics = [
+        _route_diag_for_instance(data, routes, idx)
+        for idx in range(len(routes))
+    ]
+    total_skipped = sum(d["missing_count"] for d in route_diagnostics)
+    constraint_diagnostics = _check_route_constraints(raw_data, routes)
     total_tw_viol = sum(d["tw_violation_count"]
                         for d in constraint_diagnostics)
     total_appear_viol = sum(d["appearance_violation_count"]

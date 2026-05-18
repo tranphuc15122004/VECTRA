@@ -33,8 +33,10 @@ def _call_lkh(nodes, veh_count, veh_capa, prefix = "/tmp/mardan_lkh0"):
             for j, d in enumerate(nodes[:, 5], start=1):
                 tsp_f.write("{} {:.0f}\n".format(j, d))
             tsp_f.write("TIME_WINDOW_SECTION\n")
-            for j, (e, l) in enumerate(nodes[:, 3:5], start=1):
-                tsp_f.write("{} {:.0f} {:.0f}\n".format(j, e, l))
+            # Use max(ready_time, appearance_time) so LKH3 respects
+            # dynamic appearance constraints when solving the static snapshot
+            for j, (e, l, a) in enumerate(zip(nodes[:, 3], nodes[:, 4], nodes[:, 6]), start=1):
+                tsp_f.write("{} {:.0f} {:.0f}\n".format(j, max(float(e), float(a)), l))
 
     par_path = "{}.par".format(prefix)
     tr_path = "{}.tour".format(prefix)

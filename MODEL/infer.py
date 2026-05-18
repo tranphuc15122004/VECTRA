@@ -1,3 +1,4 @@
+import time
 from argparse import ArgumentParser
 import json
 import os
@@ -249,7 +250,8 @@ def _print_routes(routes, costs, max_instances):
 
 def _save_json(path, routes, normalized_costs, raw_replay_costs = None,
 		route_diagnostics = None, constraint_diagnostics = None,
-		raw_cost_components = None, normalized_cost_components = None):
+		raw_cost_components = None, normalized_cost_components = None,
+		inference_time = None):
 	if raw_replay_costs is None:
 		raw_replay_costs = normalized_costs
 	if route_diagnostics is None:
@@ -262,6 +264,7 @@ def _save_json(path, routes, normalized_costs, raw_replay_costs = None,
 		normalized_cost_components = []
 
 	payload = {
+		"inference_time": inference_time,
 		"costs": [float(v) for v in normalized_costs.cpu().tolist()],
 		"normalized_costs": [float(v) for v in normalized_costs.cpu().tolist()],
 		"raw_replay_costs": [float(v) for v in raw_replay_costs.cpu().tolist()],
@@ -381,7 +384,9 @@ def _check_route_constraints(data, routes, eps = 1e-9):
 				service_t = float(dest[5].item())
 				appear_t = float(dest[6].item()) if dest.numel() >= 7 else 0.0
 
-				start_service = max(arrival, open_t)
+				# Respect appearance time: cannot start service
+				# before the customer has appeared in the dynamic problem.
+				start_service = max(arrival, open_t, appear_t)
 
 				if cust_id != 0:
 					if start_service > close_t + eps:
@@ -445,8 +450,11 @@ def _compute_cost_components(data, routes, pending_cost, late_cost, eps = 1e-9):
 				open_t = float(dest[3].item())
 				close_t = float(dest[4].item())
 				service_t = float(dest[5].item())
+				appear_t = float(dest[6].item()) if dest.numel() >= 7 else 0.0
 
-				start_service = max(arrival, open_t)
+				# Respect appearance time: cannot start service
+				# before the customer has appeared in the dynamic problem.
+				start_service = max(arrival, open_t, appear_t)
 				late = max(0.0, start_service - close_t)
 
 				total_distance += dist
@@ -510,18 +518,29 @@ def main(args):
 	_load_model_weights_or_raise(args.model_weight, learner)
 	learner.eval()
 
+	t_infer_start = time.perf_counter()
 	routes, costs = _run_inference(args, env, learner)
-	raw_replay_costs = _replay_routes_cost(raw_data, env_cls, env_params, routes, rollouts = args.verify_rollouts)
+	t_infer_end = time.perf_counter()
+	inference_time = t_infer_end - t_infer_start
+	
+	# Compute static cost components for raw_replay_costs (consistent with
+	# LKH/OR-Tools evaluation). Dynamic replay via eval_apriori_routes is
+	# broken for DVRPTW because _keep_alive_until_reveal interferes with
+	# vehicle ordering and inflates costs.
+	# NOTE: costs from _run_inference are the TRUE model trajectory costs.
+	# raw_replay_costs is derived from static component analysis for
+	# cross-solver comparability.
+	raw_cost_components = _compute_cost_components(raw_data, routes, args.pending_cost, args.late_cost)
+	normalized_cost_components = _compute_cost_components(data, routes, args.pending_cost, args.late_cost)
+	raw_replay_costs = raw_data.nodes.new_tensor([c["total_cost"] for c in raw_cost_components])
 	route_diagnostics = [_route_diag_for_instance(data, routes, idx) for idx in range(len(routes))]
 	total_skipped = sum(d["missing_count"] for d in route_diagnostics)
 	constraint_diagnostics = _check_route_constraints(raw_data, routes)
-	raw_cost_components = _compute_cost_components(raw_data, routes, args.pending_cost, args.late_cost)
-	normalized_cost_components = _compute_cost_components(data, routes, args.pending_cost, args.late_cost)
 	total_tw_viol = sum(d["tw_violation_count"] for d in constraint_diagnostics)
 	total_appear_viol = sum(d["appearance_violation_count"] for d in constraint_diagnostics)
 	mean = costs.mean().item()
 	std = costs.std().item() if costs.numel() > 1 else 0.0
-	print("Inference done on {} instance(s): mean={:.4f}, std={:.4f}".format(costs.numel(), mean, std))
+	print("Inference done on {} instance(s): mean={:.4f}, std={:.4f}, time={:.2f}s".format(costs.numel(), mean, std, inference_time))
 	print("Cost summary: normalized_cost_mean={:.4f}, raw_replay_cost_mean={:.4f}".format(
 		costs.mean().item(),
 		raw_replay_costs.mean().item(),
@@ -574,6 +593,7 @@ def main(args):
 			constraint_diagnostics,
 			raw_cost_components,
 			normalized_cost_components,
+			inference_time=inference_time,
 		)
 		print("Saved inference outputs to '{}'".format(args.save_json))
 

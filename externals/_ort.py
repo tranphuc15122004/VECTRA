@@ -85,6 +85,13 @@ def _solve_one(nodes: torch.Tensor, veh_count: int, veh_capa: int,
         dem_cb_idx, 0, [veh_capa] * veh_count, True, "Capacity"
     )
 
+    # ---- disjunction: allow skipping customers with penalty -------------
+    # Without this, ALL customers must be visited → likely infeasible
+    # for large problems with tight time windows.
+    pending_penalty = _r(float(veh_capa))  # high penalty to encourage serving
+    for j in range(1, num_nodes):
+        routing.AddDisjunction([manager.NodeToIndex(j)], pending_penalty)
+
     # ---- time dimension (only for problems with time windows) ------------
     has_tw = nodes.size(1) > 3
 
@@ -102,8 +109,11 @@ def _solve_one(nodes: torch.Tensor, veh_count: int, veh_capa: int,
 
         time_cb_idx = routing.RegisterTransitCallback(time_cb)
         # slack_max = horizon  →  vehicles can wait for ready times
-        # capacity  = 2*horizon → enough headroom for any feasible route
-        routing.AddDimension(time_cb_idx, horizon, 2 * horizon, True, "Time")
+        # capacity  = max(2 * horizon, num_nodes * horizon)
+        #   → enough headroom for any feasible route, even with 400+ nodes
+        max_route_time = max(2 * horizon, num_nodes * horizon)
+        routing.AddDimension(time_cb_idx, horizon,
+                             max_route_time, True, "Time")
         time_dim = routing.GetDimensionOrDie("Time")
 
         # Soft time-window constraints  (penalty = late_cost per unit late)
@@ -119,6 +129,10 @@ def _solve_one(nodes: torch.Tensor, veh_count: int, veh_capa: int,
             time_dim.SetCumulVarSoftUpperBound(
                 routing.End(v), horizon, _r(late_cost)
             )
+
+    # Allow some vehicles to stay unused (penalty-free)
+    for v in range(veh_count):
+        routing.AddDisjunction([routing.Start(v)], 0)
 
     # ---- search parameters -----------------------------------------------
     params = pywrapcp.DefaultRoutingSearchParameters()

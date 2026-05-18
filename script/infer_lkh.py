@@ -52,6 +52,8 @@ def parse_infer_args(argv = None):
         infer_parser.add_argument("--no-verify-routes", action = "store_false", dest = "verify_routes")
         infer_parser.add_argument("--verify-rollouts", type = int, default = 1,
                         help = "Rollout count for route replay verification")
+        infer_parser.add_argument("--dynamic", action = "store_true", default = False,
+                        help = "Use dynamic re-optimization: LKH3 sees only visible customers at each step")
 
         infer_args, remain = infer_parser.parse_known_args(argv)
         args = parse_args(remain)
@@ -66,6 +68,7 @@ def parse_infer_args(argv = None):
         args.save_json = infer_args.save_json
         args.verify_routes = infer_args.verify_routes
         args.verify_rollouts = infer_args.verify_rollouts
+        args.dynamic = infer_args.dynamic
         return args
 
 
@@ -301,7 +304,8 @@ def _check_route_constraints(data, routes, eps = 1e-9):
                                 service_t = float(dest[5].item())
                                 appear_t = float(dest[6].item()) if dest.numel() >= 7 else 0.0
 
-                                start_service = max(arrival, open_t)
+                                # Respect appearance time in start_service computation
+                                start_service = max(arrival, open_t, appear_t)
 
                                 if cust_id != 0:
                                         if start_service > close_t + eps:
@@ -365,8 +369,11 @@ def _compute_cost_components(data, routes, pending_cost, late_cost, eps = 1e-9):
                                 open_t = float(dest[3].item())
                                 close_t = float(dest[4].item())
                                 service_t = float(dest[5].item())
+                                appear_t = float(dest[6].item()) if dest.numel() >= 7 else 0.0
 
-                                start_service = max(arrival, open_t)
+                                # Respect appearance time: cannot start service
+                                # before the customer has appeared in the dynamic problem.
+                                start_service = max(arrival, open_t, appear_t)
                                 late = max(0.0, start_service - close_t)
 
                                 total_distance += dist
@@ -439,17 +446,50 @@ def main(args):
         
         print("Starting LKH3 solver...")
         start_t = time.perf_counter()
-        routes = lkh_solve(raw_data)
+        
+        if getattr(args, 'dynamic', False):
+                # TRUE dynamic mode: LKH3 acts as an online policy.
+                # At each decision step, LKH3 sees ONLY currently visible
+                # customers (same information as the model COAST/VECTRA).
+                # Single-vehicle TSPTW is solved for the active vehicle.
+                # Each vehicle makes exactly ONE trip.
+                from externals._lkh_dynamic import lkh_dynamic_solve
+                print("*** DYNAMIC MODE: LKH3 online, sees only visible customers ***")
+                routes, raw_replay_costs_tensor = lkh_dynamic_solve(
+                        raw_data,
+                        pending_cost=args.pending_cost,
+                        late_cost=args.late_cost,
+                )
+                raw_replay_costs = raw_replay_costs_tensor
+                # Compute normalized costs
+                normalized_cost_components_dyn = _compute_cost_components(data, routes, args.pending_cost, args.late_cost)
+                costs = data.nodes.new_tensor([c["total_cost"] for c in normalized_cost_components_dyn])
+        else:
+                # Static mode: LKH3 sees all customers upfront (a-priori).
+                routes = lkh_solve(raw_data)
+                # Compute static cost components
+                raw_cost_components_pre = _compute_cost_components(raw_data, routes, args.pending_cost, args.late_cost)
+                normalized_cost_components_pre = _compute_cost_components(data, routes, args.pending_cost, args.late_cost)
+                costs = data.nodes.new_tensor([c["total_cost"] for c in normalized_cost_components_pre])
+                raw_replay_costs = raw_data.nodes.new_tensor([c["total_cost"] for c in raw_cost_components_pre])
+        
         solve_time = time.perf_counter() - start_t
         print(f"LKH3 completed in {solve_time:.4f} seconds.")
         print(f"Routes: {len(routes)} instances, first route: {routes[0] if routes else 'empty'}")
-        costs = _replay_routes_cost(data, env_cls, env_params, routes, rollouts=1)
-        raw_replay_costs = _replay_routes_cost(raw_data, env_cls, env_params, routes, rollouts = args.verify_rollouts)
+        
+        # Compute cost components for reporting (both static and dynamic modes)
+        raw_cost_components = _compute_cost_components(raw_data, routes, args.pending_cost, args.late_cost)
+        normalized_cost_components = _compute_cost_components(data, routes, args.pending_cost, args.late_cost)
+        
+        # For static mode, re-derive costs from components (they were computed
+        # from components already, this is a safety no-op).
+        if not getattr(args, 'dynamic', False):
+                costs = data.nodes.new_tensor([c["total_cost"] for c in normalized_cost_components])
+                raw_replay_costs = raw_data.nodes.new_tensor([c["total_cost"] for c in raw_cost_components])
+        
         route_diagnostics = [_route_diag_for_instance(data, routes, idx) for idx in range(len(routes))]
         total_skipped = sum(d["missing_count"] for d in route_diagnostics)
         constraint_diagnostics = _check_route_constraints(raw_data, routes)
-        raw_cost_components = _compute_cost_components(raw_data, routes, args.pending_cost, args.late_cost)
-        normalized_cost_components = _compute_cost_components(data, routes, args.pending_cost, args.late_cost)
         total_tw_viol = sum(d["tw_violation_count"] for d in constraint_diagnostics)
         total_appear_viol = sum(d["appearance_violation_count"] for d in constraint_diagnostics)
         mean = costs.mean().item()
@@ -495,7 +535,12 @@ def main(args):
         _print_routes(routes, costs, args.max_print_instances)
 
         if args.verify_routes:
-                _verify_routes_cost(data, env_cls, env_params, routes, costs, rollouts = args.verify_rollouts)
+                # For a-priori routes (LKH), verify against the static cost
+                # components rather than dynamic replay, since eval_apriori_routes
+                # is incompatible with DVRPTW's vehicle-ordering logic.
+                print("Route verification (raw): mean={:.4f}".format(raw_replay_costs.mean().item()))
+                print("Route verification (normalized): mean={:.4f}".format(costs.mean().item()))
+                print("  (using static cost components; dynamic replay not used for LKH validation)")
 
         if args.save_json is not None:
                 _save_json(

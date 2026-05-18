@@ -54,6 +54,11 @@ def parse_args() -> argparse.Namespace:
         help="Force greedy decode in MODEL/infer.py (default)",
     )
     parser.add_argument(
+        "--dynamic",
+        action="store_true",
+        help="Use dynamic re-optimization: LKH3 sees only visible customers",
+    )
+    parser.add_argument(
         "--no-verify-routes",
         action="store_true",
         help="Disable route replay verification in infer.py",
@@ -194,6 +199,8 @@ def run_one(
     ]
     if args.no_verify_routes:
         cmd.append("--no-verify-routes")
+    if args.dynamic:
+        cmd.append("--dynamic")
     if args.sample:
         cmd.append("--sample")
     elif args.greedy:

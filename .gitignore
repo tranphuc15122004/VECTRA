@@ -6,3 +6,5 @@ pretrained/
 *.pdf
 *.pyth
 mardam_output/
+datasets/
+infer/

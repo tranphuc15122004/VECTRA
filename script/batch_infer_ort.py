@@ -191,6 +191,7 @@ def run_one(
         "--veh-speed", _format_cli_number(args.veh_speed),
         "--late-cost", _format_cli_number(args.late_cost),
         "--pending-cost", _format_cli_number(args.pending_cost),
+        "--time-limit-ms", str(args.time_limit_ms),
         "--max-print-instances", str(args.max_print_instances),
         "--verify-rollouts", str(args.verify_rollouts),
         "--data-csv", str(csv_path),
