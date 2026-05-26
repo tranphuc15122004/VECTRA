@@ -21,6 +21,8 @@ VECTRA_MODELS = {
     "b3": ("MODEL/infer.py", "data/_Ablation/B3/args.json", "data/_Ablation/B3/chkpt_best.pyth"),
     "b5": ("MODEL/infer.py", "data/_Ablation/B5/args.json", "data/_Ablation/B5/chkpt_best.pyth"),
     "edgeoff": ("MODEL/infer.py", "data/_Ablation/Edgeoff/args.json", "data/_Ablation/Edgeoff/chkpt_best.pyth"),
+    "no_ownership": ("MODEL/infer.py", "output/ablation/no_ownership/seed42/args.json", "output/ablation/no_ownership/seed42/chkpt_best.pyth"),
+    "no_lookahead": ("MODEL/infer.py", "output/ablation/no_lookahead/seed42/args.json", "output/ablation/no_lookahead/seed42/chkpt_best.pyth"),
 }
 MARDAM_MODEL = ("MODEL/infer_mardam.py", "data/mardam/args.json", "data/mardam/chkpt_best.pyth")
 

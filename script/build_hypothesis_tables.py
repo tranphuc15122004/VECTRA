@@ -22,6 +22,10 @@ DISPLAY_NAMES = {
     "b3": "B3",
     "b5": "B5",
     "edgeoff": "EdgeOff",
+    "no_ownership": "NoOwnership",
+    "noownership": "NoOwnership",
+    "no_lookahead": "NoLookahead",
+    "nolookahead": "NoLookahead",
 }
 
 LOWER_IS_BETTER = {
@@ -75,6 +79,10 @@ def normalize_algorithm(value: Any) -> str:
         return "edgeoff"
     if raw in {"poly_net", "poly-net"}:
         return "polynet"
+    if raw == "noownership":
+        return "no_ownership"
+    if raw == "nolookahead":
+        return "no_lookahead"
     return raw
 
 
@@ -347,8 +355,10 @@ def aggregate_ood(rows: list[dict[str, Any]], samples: int, seed: int) -> list[d
 def build_hypothesis_rows(master_rows: list[dict[str, Any]], behavior_rows: list[dict[str, Any]], ood_rows: list[dict[str, Any]], samples: int, seed: int) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     dynamic_specs = [
+        ("H1", "Coordination Ablation", "COAST/VECTRA vs clean NoOwnership", "vectra", "no_ownership", ["normalized_cost", "total_skipped_customers", "visited_customers"]),
         ("H1", "Coordination Ablation", "B1 memory-only vs B0 no-memory", "b1", "b0", ["normalized_cost", "total_skipped_customers", "visited_customers"]),
         ("H1", "Coordination Ablation", "COAST/VECTRA vs B1 memory-only", "vectra", "b1", ["normalized_cost", "total_skipped_customers", "visited_customers"]),
+        ("H2", "Lookahead Intervention Analysis", "COAST/VECTRA vs clean NoLookahead", "vectra", "no_lookahead", ["normalized_cost", "normalized_late_time", "normalized_late_penalty", "total_skipped_customers"]),
         ("H2", "Lookahead Intervention Analysis", "B3 lookahead-only vs B0 no-memory", "b3", "b0", ["normalized_cost", "normalized_late_time", "normalized_late_penalty", "total_skipped_customers"]),
         ("H2", "Lookahead Intervention Analysis", "COAST/VECTRA vs B1 combined ownership/lookahead", "vectra", "b1", ["normalized_cost", "normalized_late_time", "normalized_late_penalty", "total_skipped_customers"]),
         ("H3", "Edge Awareness Under Tight Constraints", "COAST/VECTRA vs EdgeOff on high TW cells", "vectra", "edgeoff", ["total_tw_violations", "normalized_late_time", "normalized_late_penalty", "total_skipped_customers", "normalized_cost"]),
@@ -363,12 +373,16 @@ def build_hypothesis_rows(master_rows: list[dict[str, Any]], behavior_rows: list
         note = ""
         if hyp in {"H1", "H2"} and base == "vectra" and other == "b1":
             note = "Single-checkpoint evidence; no clean no_ownership/no_lookahead checkpoint, so interpret as combined mechanism effect."
+        if other in {"no_ownership", "no_lookahead"}:
+            note = "Clean ablation row; supports the main mechanism claim only after the corresponding checkpoint exists."
         for metric in metrics:
             out.append(paired_rows(master_rows, base, other, metric, hyp, table, comparison, subset, filt, samples, seed, note))
 
     behavior_specs = [
+        ("H1", "Coordination Ablation", "COAST/VECTRA vs clean NoOwnership route behavior", "vectra", "no_ownership", ["vehicle_load_std_mean", "duplicate_count_mean", "service_region_overlap_proxy", "route_customer_overlap_proxy"]),
         ("H1", "Coordination Ablation", "COAST/VECTRA vs B1 route behavior", "vectra", "b1", ["vehicle_load_std_mean", "duplicate_count_mean", "service_region_overlap_proxy", "route_customer_overlap_proxy"]),
         ("H1", "Coordination Ablation", "B1 memory-only vs B0 route behavior", "b1", "b0", ["vehicle_load_std_mean", "duplicate_count_mean", "service_region_overlap_proxy", "route_customer_overlap_proxy"]),
+        ("H2", "Lookahead Intervention Analysis", "COAST/VECTRA vs clean NoLookahead decision behavior", "vectra", "no_lookahead", ["attention_override_rate", "lookahead_support_rate", "final_rank_mean"]),
         ("H2", "Lookahead Intervention Analysis", "COAST/VECTRA vs B3 decision behavior", "vectra", "b3", ["attention_override_rate", "lookahead_support_rate", "final_rank_mean"]),
     ]
     for hyp, table, comparison, base, other, metrics in behavior_specs:

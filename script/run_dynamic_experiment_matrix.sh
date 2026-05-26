@@ -41,6 +41,23 @@ MODEL_LIST="${MODEL_LIST:-vectra,mardam,b0,b1,b3,b5,edgeoff,am,polynet,ortools,l
 FILE_GLOB="${FILE_GLOB:-**/*.csv}"
 MAX_FILES="${MAX_FILES:-0}"
 
+first_existing() {
+  local fallback="$1"
+  shift
+  for path in "$fallback" "$@"; do
+    if [[ -f "$path" ]]; then
+      echo "$path"
+      return
+    fi
+  done
+  echo "$fallback"
+}
+
+NO_OWNERSHIP_CONFIG="${NO_OWNERSHIP_CONFIG:-$(first_existing output/ablation/no_ownership/seed42/args.json data/_Ablation/NoOwnership/args.json data/_Ablation/no_ownership/args.json)}"
+NO_OWNERSHIP_WEIGHT="${NO_OWNERSHIP_WEIGHT:-$(first_existing output/ablation/no_ownership/seed42/chkpt_best.pyth data/_Ablation/NoOwnership/chkpt_best.pyth data/_Ablation/no_ownership/chkpt_best.pyth)}"
+NO_LOOKAHEAD_CONFIG="${NO_LOOKAHEAD_CONFIG:-$(first_existing output/ablation/no_lookahead/seed42/args.json data/_Ablation/NoLookahead/args.json data/_Ablation/no_lookahead/args.json)}"
+NO_LOOKAHEAD_WEIGHT="${NO_LOOKAHEAD_WEIGHT:-$(first_existing output/ablation/no_lookahead/seed42/chkpt_best.pyth data/_Ablation/NoLookahead/chkpt_best.pyth data/_Ablation/no_lookahead/chkpt_best.pyth)}"
+
 DATASETS_ROOT_ABS="$(realpath "$DATASETS_ROOT")"
 OUTPUT_ROOT_ABS="$(mkdir -p "$OUTPUT_ROOT" && realpath "$OUTPUT_ROOT")"
 
@@ -225,6 +242,8 @@ run_vectra_like "b1" "data/_Ablation/B1/args.json" "data/_Ablation/B1/chkpt_best
 run_vectra_like "b3" "data/_Ablation/B3/args.json" "data/_Ablation/B3/chkpt_best.pyth"
 run_vectra_like "b5" "data/_Ablation/B5/args.json" "data/_Ablation/B5/chkpt_best.pyth"
 run_vectra_like "edgeoff" "data/_Ablation/Edgeoff/args.json" "data/_Ablation/Edgeoff/chkpt_best.pyth"
+run_vectra_like "no_ownership" "$NO_OWNERSHIP_CONFIG" "$NO_OWNERSHIP_WEIGHT"
+run_vectra_like "no_lookahead" "$NO_LOOKAHEAD_CONFIG" "$NO_LOOKAHEAD_WEIGHT"
 run_external_model "am" "am" "data/_AM/args.json" "data/_AM/chkpt_best.pyth"
 run_external_model "polynet" "polynet" "data/_PolyNet/args.json" "data/_PolyNet/chkpt_best.pyth"
 run_ortools

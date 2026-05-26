@@ -2,6 +2,38 @@
 
 This runbook describes how to regenerate the paper-facing experimental artifacts without silently claiming results that were not run.
 
+## 0. One-Command H1-H4 Pipeline
+
+Run the full inference-only H1-H4 pipeline:
+
+```bash
+DATASETS_ROOT=/path/to/dvrptw_dynamic_grid \
+bash script/run_hypothesis_experiments.sh
+```
+
+Smoke test the pipeline without running the full grid:
+
+```bash
+DATASETS_ROOT=/path/to/dvrptw_dynamic_grid \
+DYNAMIC_MAX_FILES=1 \
+DIAG_MAX_FILES=1 \
+OOD_SMOKE_SIZE=8 \
+INCLUDE_EXTERNAL=0 \
+bash script/run_hypothesis_experiments.sh
+```
+
+Main outputs:
+
+```text
+output/hypothesis_experiments/
+├── dynamic_benchmark_verified/paper_ready/
+├── ood_eval/
+├── behavior_analysis/
+└── hypothesis_tables/
+```
+
+If clean `no_ownership` or `no_lookahead` checkpoints exist under `output/ablation/{profile}/seed42/`, they are included automatically; otherwise those rows are skipped and marked missing in the hypothesis table.
+
 ## 1. Merge Existing Dynamic Results
 
 Use this first. It reuses raw VECTRA and MARDAM summaries already present under `dynamic_benchmark/{vectra,mardam}/dod_*/tw_*/seed_*/summary.csv`.

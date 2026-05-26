@@ -742,6 +742,13 @@ PYTHONPATH=. python script/build_hypothesis_tables.py \
   --output-dir output/hypothesis_tables
 ```
 
+Hoặc chạy toàn bộ pipeline H1-H4 bằng một script:
+
+```bash
+DATASETS_ROOT=/path/to/dvrptw_dynamic_grid \
+bash script/run_hypothesis_experiments.sh
+```
+
 Runbook đầy đủ cho phần thực nghiệm nằm ở `paper/EXPERIMENT_RUNBOOK.md`.
 
 ## Cài Đặt
