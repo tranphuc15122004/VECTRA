@@ -339,7 +339,7 @@ def _route_diag_for_instance(data, routes, inst_idx):
         "missing_count": len(missing),
         "duplicate_count": len(dup),
         "extra_count": len(extra),
-        "missing_head": missing[:10],
+        "missing_head": missing,
         "duplicate_head": dup[:10],
         "extra_head": extra[:10],
     }

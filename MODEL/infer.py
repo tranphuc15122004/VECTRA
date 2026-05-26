@@ -48,6 +48,10 @@ def parse_infer_args(argv = None):
 			help = "Number of instances to print routes for")
 	infer_parser.add_argument("--save-json", type = str, default = None,
 			help = "Optional path to save routes/costs JSON")
+	infer_parser.add_argument("--save-step-diagnostics", action = "store_true", default = False,
+			help = "Include per-step score diagnostics in --save-json output")
+	infer_parser.add_argument("--step-diagnostics-limit", type = int, default = 1,
+			help = "Number of batch instances to keep in step diagnostics")
 	infer_parser.add_argument("--verify-routes", action = "store_true", default = True,
 			help = "Replay returned routes and compare replayed cost with model cost")
 	infer_parser.add_argument("--no-verify-routes", action = "store_false", dest = "verify_routes")
@@ -65,6 +69,8 @@ def parse_infer_args(argv = None):
 	args.stoch_rollouts = infer_args.stoch_rollouts
 	args.max_print_instances = infer_args.max_print_instances
 	args.save_json = infer_args.save_json
+	args.save_step_diagnostics = infer_args.save_step_diagnostics
+	args.step_diagnostics_limit = infer_args.step_diagnostics_limit
 	args.verify_routes = infer_args.verify_routes
 	args.verify_rollouts = infer_args.verify_rollouts
 	return args
@@ -280,6 +286,9 @@ def _save_json(path, routes, normalized_costs, raw_replay_costs = None,
 		"normalized_cost_components": normalized_cost_components,
 		"routes": routes,
 	}
+	if step_diagnostics is not None:
+		payload["step_diagnostics"] = step_diagnostics
+		payload["step_diagnostics_count"] = len(step_diagnostics)
 	os.makedirs(os.path.dirname(path), exist_ok = True) if os.path.dirname(path) else None
 	with open(path, "w") as f:
 		json.dump(payload, f, indent = 2)
@@ -309,7 +318,7 @@ def _route_diag_for_instance(data, routes, inst_idx):
 		"missing_count": len(missing),
 		"duplicate_count": len(dup),
 		"extra_count": len(extra),
-		"missing_head": missing[:10],
+		"missing_head": missing,
 		"duplicate_head": dup[:10],
 		"extra_head": extra[:10],
 	}
@@ -517,6 +526,11 @@ def main(args):
 
 	_load_model_weights_or_raise(args.model_weight, learner)
 	learner.eval()
+	if hasattr(learner, "enable_step_diagnostics"):
+		learner.enable_step_diagnostics(
+			args.save_step_diagnostics,
+			max_instances = args.step_diagnostics_limit,
+		)
 
 	t_infer_start = time.perf_counter()
 	routes, costs = _run_inference(args, env, learner)
@@ -533,6 +547,8 @@ def main(args):
 	raw_cost_components = _compute_cost_components(raw_data, routes, args.pending_cost, args.late_cost)
 	normalized_cost_components = _compute_cost_components(data, routes, args.pending_cost, args.late_cost)
 	raw_replay_costs = raw_data.nodes.new_tensor([c["total_cost"] for c in raw_cost_components])
+	step_diagnostics = learner.get_step_diagnostics() if args.save_step_diagnostics and hasattr(learner, "get_step_diagnostics") else None
+	raw_replay_costs = _replay_routes_cost(raw_data, env_cls, env_params, routes, rollouts = args.verify_rollouts)
 	route_diagnostics = [_route_diag_for_instance(data, routes, idx) for idx in range(len(routes))]
 	total_skipped = sum(d["missing_count"] for d in route_diagnostics)
 	constraint_diagnostics = _check_route_constraints(raw_data, routes)

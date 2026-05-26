@@ -146,7 +146,7 @@ COAST decomposes the customer selection process into three stages:
 
 ### 4.2 Customer and Vehicle Encoding
 
-**Customer Graph Encoding:** Customers are encoded using a Transformer-based graph encoder with spatial inductive biases (RBF distance encoding, optional k-NN sparsification). This produces customer embeddings $\mathbf{C} \in \mathbb{R}^{n \times d}$.
+**Customer Graph Encoding:** Customers are encoded using a Transformer-based graph encoder with spatial inductive biases from RBF distance encoding. This produces customer embeddings $\mathbf{C} \in \mathbb{R}^{n \times d}$.
 
 **Vehicle Encoding:** Vehicle states are projected and refined through cross-attention to customer embeddings, yielding vehicle representations $\mathbf{V} \in \mathbb{R}^{m \times d}$. For the acting vehicle $i_t$, we extract $\mathbf{v}_{i_t} \in \mathbb{R}^{1 \times d}$.
 
@@ -262,7 +262,6 @@ We propose COAST, a neural routing framework for DVRPTW that explicitly decompos
 - Transformer layers: 3 for graph encoder, 3 for fleet encoder
 - Attention heads: 8
 - RBF bins: 16 (for spatial bias)
-- k-NN: optional, $k=20$ for large instances
 - Lookahead MLP: [3d → 128 → 1] with ReLU and dropout(0.1)
 - Score fusion MLP: [3 → 64 → 1] with ReLU
 - Exploration: $\tanh(\text{score}) \times 10$ during training

@@ -154,6 +154,40 @@ def _apply_ablation_profile(args):
                         "fusion_mode": "mlp",
                         "linear_fusion_weights": (1.0, 1.0, 1.0),
                 },
+                # Clean H1 ablation: keep memory/lookahead/edge, remove ownership bias
+                "no_ownership": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": False,
+                        "use_lookahead": True,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                "noownership": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": False,
+                        "use_lookahead": True,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                # Clean H2 ablation: keep memory/ownership/edge, remove lookahead
+                "no_lookahead": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": True,
+                        "use_lookahead": False,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
+                "nolookahead": {
+                        "use_edge_features": True,
+                        "use_memory": True,
+                        "use_ownership": True,
+                        "use_lookahead": False,
+                        "fusion_mode": "mlp",
+                        "linear_fusion_weights": (1.0, 1.0, 1.0),
+                },
                 # aliases for current-scope matrix
                 "a0": {
                         "use_edge_features": True,
@@ -267,7 +301,11 @@ def parse_args(argv = None):
     group.add_argument(
             "--ablation-profile",
             type = str,
-            choices = ["none", "vectra", "b0", "b1", "b3", "b5", "edgeoff", "a0", "a1", "a3", "a4", "a9"],
+            choices = [
+                    "none", "vectra", "b0", "b1", "b3", "b5", "edgeoff",
+                    "no_ownership", "noownership", "no_lookahead", "nolookahead",
+                    "a0", "a1", "a3", "a4", "a9",
+            ],
             default = ABLATION_PROFILE,
             help = "Apply a predefined ablation configuration with one flag",
     )

@@ -11,6 +11,18 @@
 - **H3:** Edge-aware scoring (8-feature edge encoder + CrossEdgeFusion) improves feasibility under tight time-window and capacity constraints.
 - **H4:** Structured multi-signal decomposition with non-linear (MLP) fusion generalizes better than linear fusion and monolithic baselines under distribution shift.
 
+**Inference-only execution path:** For the current paper-strength-without-retraining setting, use existing checkpoints and build H1-H4 tables with:
+
+```bash
+PYTHONPATH=. python script/build_hypothesis_tables.py \
+  --master-summary output/dynamic_benchmark_verified/paper_ready/master_summary.csv \
+  --ood-summary output/ood_eval/ood_summary.csv \
+  --behavior-summary output/behavior_analysis/hypothesis_behavior_summary.csv \
+  --output-dir output/hypothesis_tables
+```
+
+This produces `hypothesis_summary.csv` and `hypothesis_summary.md`. Because this path uses single checkpoints, do not claim multi-seed robustness unless the multi-seed training phase below is completed.
+
 ---
 
 ### ✅ Current Status Summary
@@ -45,7 +57,6 @@ FAIR_BACKBONE = {
     "head_count": 4,          # ← ĐÃ ĐƯỢC XÁC NHẬN: tất cả dùng 4
     "ff_size": 256,           # ← ĐÃ ĐƯỢC XÁC NHẬN: tất cả dùng 256
     "edge_feat_size": 8,
-    "cust_k": None,
     "memory_size": 128,
     "lookahead_hidden": 128,
     "dropout": 0.1,
@@ -95,6 +106,8 @@ TRAIN_CONFIG = {
 | B3      | `b3`                | ✗ | ✗ | ✓ | ✓ | MLP |
 | B5      | `b5`                | ✓ | ✓ | ✓ | ✓ | Linear |
 | EdgeOff | `edgeoff`           | ✓ | ✓ | ✓ | ✗ | MLP |
+| NoOwnership | `no_ownership`  | ✓ | ✗ | ✓ | ✓ | MLP |
+| NoLookahead | `no_lookahead`  | ✓ | ✓ | ✗ | ✓ | MLP |
 
 ---
 
@@ -289,7 +302,6 @@ def load_model(checkpoint_path, device):
         tanh_xplor=args.get("tanh_xplor", 10),
         greedy=True,
         edge_feat_size=args.get("edge_feat_size", 8),
-        cust_k=args.get("cust_k"),
         memory_size=args.get("memory_size", 128),
         lookahead_hidden=args.get("lookahead_hidden", 128),
         dropout=args.get("dropout", 0.1),
@@ -506,7 +518,7 @@ python script/eval_literature_baselines.py \
 #### 3.2.2 PolyNet
 
 Checkpoint: `/home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/chkpt_best.pyth`
-Config: `layer=5, head=8, ff=256` + k-NN sparsification
+Config: `layer=5, head=8, ff=256`
 
 ```bash
 python script/eval_literature_baselines.py \

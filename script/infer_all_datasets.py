@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -64,6 +65,12 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="**/*.csv",
         help="Glob pattern relative to datasets root",
+    )
+    parser.add_argument(
+        "--max-files",
+        type=int,
+        default=0,
+        help="Optional cap on matched CSV files; 0 means all files.",
     )
     parser.add_argument(
         "--fail-fast",
@@ -136,6 +143,7 @@ def parse_infer_json(payload: dict[str, Any]) -> dict[str, Any]:
         "normalized_late_penalty": norm_comp.get("late_penalty"),
         "normalized_skipped_orders": norm_comp.get("skipped_orders"),
         "normalized_skipped_penalty": norm_comp.get("skipped_penalty"),
+        "step_diagnostics_count": payload.get("step_diagnostics_count"),
     }
 
 
@@ -185,8 +193,11 @@ def run_one(
     for extra in args.extra_arg:
         cmd.append(extra)
 
+    env = os.environ.copy()
+    env["MKL_SERVICE_FORCE_INTEL"] = "1"
+
     start = time.perf_counter()
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
     duration_sec = time.perf_counter() - start
 
     with log_path.open("w", encoding="utf-8") as f:
@@ -308,6 +319,8 @@ def main() -> int:
     ensure_dir(logs_root)
 
     csv_files = find_csv_files(datasets_root, args.file_glob)
+    if args.max_files and args.max_files > 0:
+        csv_files = csv_files[:args.max_files]
     if not csv_files:
         print(f"No CSV files found in {datasets_root} using pattern {args.file_glob}")
         return 1
@@ -344,6 +357,9 @@ def main() -> int:
         "verify_rollouts": args.verify_rollouts,
         "decode_mode": "sample" if args.sample else "greedy",
         "no_verify_routes": bool(args.no_verify_routes),
+        "step_diagnostics": "--save-step-diagnostics" in args.extra_arg,
+        "file_glob": args.file_glob,
+        "max_files": args.max_files,
         "total_files": len(rows),
         "ok_files": sum(1 for r in rows if r.get("status") == "ok"),
         "failed_files": sum(1 for r in rows if r.get("status") != "ok"),

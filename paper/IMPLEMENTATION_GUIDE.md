@@ -295,7 +295,6 @@ def load_vectra_from_checkpoint(ckpt_path, device, use_args_from_ckpt=True):
         tanh_xplor=args.get("tanh_xplor", 10),
         greedy=True,  # GREEDY for evaluation
         edge_feat_size=args.get("edge_feat_size", 8),
-        cust_k=args.get("cust_k"),
         memory_size=args.get("memory_size", 128),
         lookahead_hidden=args.get("lookahead_hidden", 128),
         dropout=args.get("dropout", 0.1),

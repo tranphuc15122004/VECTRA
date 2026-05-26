@@ -68,7 +68,7 @@ Tách rõ:
    - Ownership: approximates soft latent allocation over vehicles.
    - Lookahead: approximates one-step conditioned cost-to-go over candidate next customers.
 4. Phân tích độ phức tạp.
-Cần nêu complexity theo số khách $L_c$, số xe $L_v$, số head, có/không có k-NN sparsification.
+Cần nêu complexity theo số khách $L_c$, số xe $L_v$, số head, adaptive depth và latent bottleneck nếu các tùy chọn này được dùng.
 5. Kiểm tra các failure mode kỹ thuật.
 Ví dụ:
    - ownership collapse về một xe
@@ -101,7 +101,7 @@ Không chỉ “remove module”, mà cần:
    - không memory
    - không lookahead
    - linear fusion thay MLP fusion
-   - full attention vs k-NN graph
+   - adaptive depth / latent bottleneck nếu đưa các tùy chọn này vào claim thực nghiệm
    - static vs dynamic arrivals
 3. Báo cáo nhiều seed.
 Ít nhất 5 seed, tốt hơn 8-10 seed nếu variance cao.

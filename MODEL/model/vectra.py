@@ -121,6 +121,11 @@ class VECTRA(nn.Module):
         self.latent_min_nodes = latent_min_nodes
         self._forward_profiler = ForwardProfiler()
         self._veh_memory = None
+        self._collect_step_diagnostics = False
+        self._step_diagnostics_max_instances = 1
+        self._step_diagnostics = []
+        self._step_diagnostics_step = 0
+        self._last_score_tensors = None
 
 
     def _build_bottleneck_indices(self, length, max_tokens, device):
@@ -342,6 +347,14 @@ class VECTRA(nn.Module):
 
         if self.tanh_xplor is not None:
             compat = self.tanh_xplor * compat.tanh()
+        if self._collect_step_diagnostics:
+            self._last_score_tensors = {
+                "att_score": att_score.detach(),
+                "owner_bias": owner_bias.detach(),
+                "lookahead": lookahead.detach(),
+                "final_score": compat.detach(),
+                "mask": None if score_mask is None else score_mask.detach(),
+            }
         self._forward_profiler.add("score_customers", time.perf_counter() - start)
         return compat
 
@@ -445,6 +458,7 @@ class VECTRA(nn.Module):
             cust_idx = logp.argmax(dim = 1, keepdim = True)
         else:
             cust_idx = logp.exp().multinomial(1)
+        self._record_step_diagnostics(dyna.cur_veh_idx, cust_idx)
         self._update_memory(dyna.cur_veh_idx, cust_idx, veh_repr, edge_emb)
         return cust_idx, logp.gather(1, cust_idx)
 
@@ -461,6 +475,7 @@ class VECTRA(nn.Module):
 
     def forward(self, dyna):
         self._forward_profiler.reset()
+        self._reset_step_diagnostics()
         dyna.reset()
         actions, logps, rewards = [], [], []
         if hasattr(dyna, "veh_speed"):
@@ -487,3 +502,50 @@ class VECTRA(nn.Module):
 
     def get_forward_profiling_summary(self):
         return self._forward_profiler.get_summary()
+
+    def enable_step_diagnostics(self, enabled = True, max_instances = 1):
+        self._collect_step_diagnostics = bool(enabled)
+        self._step_diagnostics_max_instances = max(0, int(max_instances))
+        self._reset_step_diagnostics()
+
+    def _reset_step_diagnostics(self):
+        self._step_diagnostics = []
+        self._step_diagnostics_step = 0
+        self._last_score_tensors = None
+
+    def get_step_diagnostics(self):
+        return list(self._step_diagnostics)
+
+    def _record_step_diagnostics(self, veh_idx, cust_idx):
+        if not self._collect_step_diagnostics or self._last_score_tensors is None:
+            return
+        max_instances = min(self._step_diagnostics_max_instances, cust_idx.size(0))
+        if max_instances <= 0:
+            self._step_diagnostics_step += 1
+            return
+
+        tensors = self._last_score_tensors
+        mask_tensor = tensors.get("mask")
+
+        def row_values(name, batch_idx):
+            row = tensors[name][batch_idx, 0].detach().cpu().tolist()
+            return [float(v) for v in row]
+
+        for batch_idx in range(max_instances):
+            if mask_tensor is None:
+                mask_values = [False] * tensors["final_score"].size(-1)
+            else:
+                mask_values = [bool(v) for v in mask_tensor[batch_idx, 0].detach().cpu().tolist()]
+            self._step_diagnostics.append({
+                "step": int(self._step_diagnostics_step),
+                "batch_index": int(batch_idx),
+                "veh_idx": int(veh_idx[batch_idx, 0].detach().cpu().item()),
+                "selected_customer": int(cust_idx[batch_idx, 0].detach().cpu().item()),
+                "valid_count": int(sum(1 for is_masked in mask_values if not is_masked)),
+                "mask": mask_values,
+                "att_score": row_values("att_score", batch_idx),
+                "owner_bias": row_values("owner_bias", batch_idx),
+                "lookahead": row_values("lookahead", batch_idx),
+                "final_score": row_values("final_score", batch_idx),
+            })
+        self._step_diagnostics_step += 1
