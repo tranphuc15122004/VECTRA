@@ -4,8 +4,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import shlex
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -13,6 +11,28 @@ from pathlib import Path
 from typing import Any
 from openpyxl import Workbook
 
+import torch
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from MODEL.infer_mardam import (
+    _build_dataset,
+    _build_env_params,
+    _check_route_constraints,
+    _clone_dataset,
+    _compute_cost_components,
+    _dataset_cls,
+    _environment_cls,
+    _init_model,
+    _load_model_weights_or_raise,
+    _route_diag_for_instance,
+    _run_inference,
+    _save_json,
+    parse_infer_args,
+)
+from utils import set_random_seed
 
 
 def parse_args() -> argparse.Namespace:
@@ -22,49 +42,49 @@ def parse_args() -> argparse.Namespace:
             "save per-case outputs plus aggregate summaries."
         )
     )
-    parser.add_argument("--datasets-root", type = Path, default = Path("datasets"))
-    parser.add_argument("--infer-script", type = Path, default = Path("MODEL/infer_mardam.py"))
+    parser.add_argument("--datasets-root", type=Path, default=Path("datasets"))
+    parser.add_argument("--infer-script", type=Path, default=Path("MODEL/infer_mardam.py"))
     parser.add_argument(
         "--python-executable",
-        type = str,
-        default = sys.executable,
-        help = "Python executable used to launch infer script",
+        type=str,
+        default=sys.executable,
+        help="Python executable used to launch infer script",
     )
-    parser.add_argument("--problem-type", type = str, default = "dvrptw")
-    parser.add_argument("--config-file", type = Path, required = True)
-    parser.add_argument("--model-weight", type = Path, required = True)
-    parser.add_argument("--vehicles-count", type = int, required = True)
-    parser.add_argument("--veh-capa", type = int, required = True)
-    parser.add_argument("--veh-speed", type = float, required = True)
-    parser.add_argument("--max-print-instances", type = int, default = 1)
-    parser.add_argument("--verify-rollouts", type = int, default = 1)
+    parser.add_argument("--problem-type", type=str, default="dvrptw")
+    parser.add_argument("--config-file", type=Path, required=True)
+    parser.add_argument("--model-weight", type=Path, required=True)
+    parser.add_argument("--vehicles-count", type=int, required=True)
+    parser.add_argument("--veh-capa", type=int, required=True)
+    parser.add_argument("--veh-speed", type=float, required=True)
+    parser.add_argument("--max-print-instances", type=int, default=1)
+    parser.add_argument("--verify-rollouts", type=int, default=1)
     decode_group = parser.add_mutually_exclusive_group()
     decode_group.add_argument(
         "--sample",
-        action = "store_true",
-        help = "Use sampling decode in MODEL/infer_mardam.py",
+        action="store_true",
+        help="Use sampling decode in MODEL/infer_mardam.py",
     )
     decode_group.add_argument(
         "--greedy",
-        action = "store_true",
-        help = "Force greedy decode in MODEL/infer_mardam.py (default)",
+        action="store_true",
+        help="Force greedy decode in MODEL/infer_mardam.py (default)",
     )
     parser.add_argument(
         "--no-verify-routes",
-        action = "store_true",
-        help = "Disable route replay verification in infer_mardam.py",
+        action="store_true",
+        help="Disable route replay verification in infer_mardam.py",
     )
     parser.add_argument(
         "--output-dir",
-        type = Path,
-        default = None,
-        help = "Default: output/batch_infer_mardam_YYYYmmdd-HHMMSS",
+        type=Path,
+        default=None,
+        help="Default: output/batch_infer_mardam_YYYYmmdd-HHMMSS",
     )
     parser.add_argument(
         "--file-glob",
-        type = str,
-        default = "**/*.csv",
-        help = "Glob pattern relative to datasets root",
+        type=str,
+        default="**/*.csv",
+        help="Glob pattern relative to datasets root",
     )
     parser.add_argument(
         "--max-files",
@@ -74,14 +94,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--fail-fast",
-        action = "store_true",
-        help = "Stop at first failed dataset",
+        action="store_true",
+        help="Stop at first failed dataset",
     )
     parser.add_argument(
         "--extra-arg",
-        action = "append",
-        default = [],
-        help = "Extra argument forwarded to infer script (can be repeated)",
+        action="append",
+        default=[],
+        help="Extra argument forwarded to infer script (can be repeated)",
     )
     return parser.parse_args()
 
@@ -91,7 +111,7 @@ def now_tag() -> str:
 
 
 def ensure_dir(path: Path) -> None:
-    path.mkdir(parents = True, exist_ok = True)
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def find_csv_files(root: Path, pattern: str) -> list[Path]:
@@ -147,8 +167,12 @@ def parse_infer_json(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_one(
-    args: argparse.Namespace,
+def run_one_inproc(
+    infer_args: argparse.Namespace,
+    learner: torch.nn.Module,
+    dataset_cls: type,
+    env_cls: type,
+    device: torch.device,
     csv_path: Path,
     datasets_root: Path,
     per_case_root: Path,
@@ -160,88 +184,93 @@ def run_one(
     ensure_dir(result_json.parent)
     ensure_dir(log_path.parent)
 
-    cmd = [
-        args.python_executable,
-        str(args.infer_script),
-        "--problem-type",
-        args.problem_type,
-        "--config-file",
-        str(args.config_file),
-        "--model-weight",
-        str(args.model_weight),
-        "--vehicles-count",
-        str(args.vehicles_count),
-        "--veh-capa",
-        str(args.veh_capa),
-        "--veh-speed",
-        _format_cli_number(args.veh_speed),
-        "--max-print-instances",
-        str(args.max_print_instances),
-        "--verify-rollouts",
-        str(args.verify_rollouts),
-        "--data-csv",
-        str(csv_path),
-        "--save-json",
-        str(result_json),
-    ]
-    if args.no_verify_routes:
-        cmd.append("--no-verify-routes")
-    if args.sample:
-        cmd.append("--sample")
-    elif args.greedy:
-        cmd.append("--greedy")
-    for extra in args.extra_arg:
-        cmd.append(extra)
-
     start = time.perf_counter()
-    proc = subprocess.run(cmd, capture_output = True, text = True)
-    duration_sec = time.perf_counter() - start
-
-    with log_path.open("w", encoding = "utf-8") as f:
-        f.write("COMMAND:\n")
-        f.write(" ".join(shlex.quote(x) for x in cmd) + "\n\n")
-        f.write("RETURN_CODE:\n")
-        f.write(str(proc.returncode) + "\n\n")
-        f.write("STDOUT:\n")
-        f.write(proc.stdout)
-        f.write("\n\nSTDERR:\n")
-        f.write(proc.stderr)
-
-    row: dict[str, Any] = {
-        "dataset_relpath": str(rel),
-        "dataset_abspath": str(csv_path.resolve()),
-        "status": "ok" if proc.returncode == 0 else "failed",
-        "return_code": proc.returncode,
-        "duration_sec": round(duration_sec, 6),
-        "result_json": str(result_json),
-        "run_log": str(log_path),
-        "command": " ".join(shlex.quote(x) for x in cmd),
-        "error_message": "",
-    }
-
-    if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout or "").strip().splitlines()
-        row["error_message"] = err[-1] if err else "inference failed"
-        return row
-
-    if not result_json.exists():
-        row["status"] = "failed"
-        row["error_message"] = "infer finished without writing save-json output"
-        return row
-
     try:
-        payload = json.loads(result_json.read_text(encoding = "utf-8"))
+        infer_args.data_csv = str(csv_path)
+
+        data = _build_dataset(infer_args, dataset_cls)
+        raw_data = _clone_dataset(data)
+        if not infer_args.no_normalize:
+            data.normalize()
+
+        env_params = _build_env_params(infer_args)
+        env = env_cls(data, None, None, *env_params)
+        env.nodes = env.nodes.to(device)
+        if env.init_cust_mask is not None:
+            env.init_cust_mask = env.init_cust_mask.to(device)
+
+        routes, costs = _run_inference(infer_args, env, learner)
+
+        raw_cost_components = _compute_cost_components(
+            raw_data, routes, infer_args.pending_cost, infer_args.late_cost
+        )
+        normalized_cost_components = _compute_cost_components(
+            data, routes, infer_args.pending_cost, infer_args.late_cost
+        )
+        raw_replay_costs = raw_data.nodes.new_tensor(
+            [c["total_cost"] for c in raw_cost_components]
+        )
+        route_diagnostics = [
+            _route_diag_for_instance(data, routes, idx)
+            for idx in range(len(routes))
+        ]
+        constraint_diagnostics = _check_route_constraints(raw_data, routes)
+
+        _save_json(
+            result_json, routes, costs,
+            raw_replay_costs=raw_replay_costs,
+            route_diagnostics=route_diagnostics,
+            constraint_diagnostics=constraint_diagnostics,
+            raw_cost_components=raw_cost_components,
+            normalized_cost_components=normalized_cost_components,
+        )
+
+        duration_sec = time.perf_counter() - start
+
+        payload = json.loads(result_json.read_text(encoding="utf-8"))
+        row: dict[str, Any] = {
+            "dataset_relpath": str(rel),
+            "dataset_abspath": str(csv_path.resolve()),
+            "status": "ok",
+            "return_code": 0,
+            "duration_sec": round(duration_sec, 6),
+            "result_json": str(result_json),
+            "run_log": str(log_path),
+            "command": "",
+            "error_message": "",
+        }
         row.update(parse_infer_json(payload))
-    except Exception as exc:  # noqa: BLE001
-        row["status"] = "failed"
-        row["error_message"] = f"cannot parse infer json: {exc}"
+
+        with log_path.open("w", encoding="utf-8") as f:
+            f.write(f"Inference (in-process) on {csv_path}\n")
+            f.write(f"Duration: {duration_sec:.6f}s\n")
+            f.write(f"Status: ok\n")
+    except Exception as exc:
+        duration_sec = time.perf_counter() - start
+        with log_path.open("w", encoding="utf-8") as f:
+            f.write(f"Inference (in-process) on {csv_path}\n")
+            f.write(f"Duration: {duration_sec:.6f}s\n")
+            f.write(f"Status: failed\n")
+            f.write(f"Error: {exc}\n")
+        row = {
+            "dataset_relpath": str(rel),
+            "dataset_abspath": str(csv_path.resolve()),
+            "status": "failed",
+            "return_code": 1,
+            "duration_sec": round(duration_sec, 6),
+            "result_json": str(result_json) if result_json.exists() else "",
+            "run_log": str(log_path),
+            "command": "",
+            "error_message": str(exc),
+        }
+
     return row
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     ensure_dir(path.parent)
     if not rows:
-        path.write_text("", encoding = "utf-8")
+        path.write_text("", encoding="utf-8")
         return
     all_keys: list[str] = []
     seen = set()
@@ -250,8 +279,8 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             if k not in seen:
                 seen.add(k)
                 all_keys.append(k)
-    with path.open("w", newline = "", encoding = "utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames = all_keys)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=all_keys)
         writer.writeheader()
         writer.writerows(rows)
 
@@ -266,7 +295,6 @@ def write_excel(path: Path, rows: list[dict[str, Any]]) -> None:
         wb.save(path)
         return
 
-    # Lấy tất cả keys (giữ thứ tự xuất hiện)
     all_keys: list[str] = []
     seen = set()
     for row in rows:
@@ -275,35 +303,63 @@ def write_excel(path: Path, rows: list[dict[str, Any]]) -> None:
                 seen.add(k)
                 all_keys.append(k)
 
-    # Ghi header
     ws.append(all_keys)
 
-    # Ghi dữ liệu
     for row in rows:
         ws.append([row.get(k, None) for k in all_keys])
 
     wb.save(path)
 
+
 def main() -> int:
     args = parse_args()
 
     datasets_root = args.datasets_root.resolve()
-    infer_script = args.infer_script.resolve()
     config_file = args.config_file.resolve()
     model_weight = args.model_weight.resolve()
 
     if not datasets_root.exists():
         raise FileNotFoundError(f"datasets root not found: {datasets_root}")
-    if not infer_script.exists():
-        raise FileNotFoundError(f"infer script not found: {infer_script}")
     if not config_file.exists():
         raise FileNotFoundError(f"config file not found: {config_file}")
     if not model_weight.exists():
         raise FileNotFoundError(f"model weight not found: {model_weight}")
 
-    args.infer_script = infer_script
-    args.config_file = config_file
-    args.model_weight = model_weight
+    infer_argv = [
+        "--config-file", str(config_file),
+        "--model-weight", str(model_weight),
+        "--problem-type", args.problem_type,
+        "--vehicles-count", str(args.vehicles_count),
+        "--veh-capa", str(args.veh_capa),
+        "--veh-speed", _format_cli_number(args.veh_speed),
+        "--max-print-instances", str(args.max_print_instances),
+        "--verify-rollouts", str(args.verify_rollouts),
+    ]
+    if args.sample:
+        infer_argv.append("--sample")
+    else:
+        infer_argv.append("--greedy")
+    if args.no_verify_routes:
+        infer_argv.append("--no-verify-routes")
+    for extra in args.extra_arg:
+        infer_argv.append(extra)
+
+    infer_args = parse_infer_args(infer_argv)
+
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() and not infer_args.no_cuda else "cpu"
+    )
+    set_random_seed(infer_args.rng_seed, deterministic=True)
+
+    dataset_cls = _dataset_cls(infer_args.problem_type)
+    env_cls = _environment_cls(infer_args.problem_type)
+    if dataset_cls is None or env_cls is None:
+        raise ValueError(f"Unsupported problem type '{infer_args.problem_type}'")
+
+    learner = _init_model(infer_args, dataset_cls, env_cls, device)
+    learner.eval()
+    _load_model_weights_or_raise(infer_args.model_weight, learner)
+    learner.eval()
 
     output_dir = args.output_dir
     if output_dir is None:
@@ -323,12 +379,16 @@ def main() -> int:
         return 1
 
     print(f"Found {len(csv_files)} CSV files")
+    print(f"Loaded model once; processing {len(csv_files)} CSVs in-process")
     rows: list[dict[str, Any]] = []
     failed = 0
 
-    for idx, csv_path in enumerate(csv_files, start = 1):
+    for idx, csv_path in enumerate(csv_files, start=1):
         print(f"[{idx}/{len(csv_files)}] infer: {csv_path}")
-        row = run_one(args, csv_path, datasets_root, per_case_root, logs_root)
+        row = run_one_inproc(
+            infer_args, learner, dataset_cls, env_cls, device,
+            csv_path, datasets_root, per_case_root, logs_root,
+        )
         rows.append(row)
         if row.get("status") != "ok":
             failed += 1
@@ -340,13 +400,12 @@ def main() -> int:
     summary_excel = output_dir / "summary.xlsx"
     summary_json = output_dir / "summary.json"
     run_meta = {
-        "created_at": datetime.now().isoformat(timespec = "seconds"),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
         "datasets_root": str(datasets_root),
-        "infer_script": str(infer_script),
-        "python_executable": args.python_executable,
-        "problem_type": args.problem_type,
+        "infer_script": str(args.infer_script),
         "config_file": str(config_file),
         "model_weight": str(model_weight),
+        "problem_type": args.problem_type,
         "vehicles_count": args.vehicles_count,
         "veh_capa": args.veh_capa,
         "veh_speed": args.veh_speed,
@@ -362,10 +421,10 @@ def main() -> int:
     }
 
     write_csv(summary_csv, rows)
-    write_excel(summary_excel , rows)
+    write_excel(summary_excel, rows)
     summary_json.write_text(
-        json.dumps({"meta": run_meta, "results": rows}, indent = 2),
-        encoding = "utf-8",
+        json.dumps({"meta": run_meta, "results": rows}, indent=2),
+        encoding="utf-8",
     )
 
     print("=" * 72)

@@ -1,0 +1,13 @@
+model,type,mean_cost,std_cost,skipped_customers,tw_violations,gap_vs_coast_pct
+COAST,Proposed,44.0200,3.9900,8224,4936,0.00
+no_lookahead,Ablation,44.7300,4.0300,8487,4346,1.61
+no_ownership,Ablation,45.1900,4.0900,8416,4610,2.66
+B0 (none),Ablation,45.3900,4.1000,8484,4373,3.11
+B1 (memory),Ablation,45.2800,4.1400,8442,4554,2.86
+B3 (lookahead),Ablation,44.8400,4.0800,8400,4669,1.86
+B5 (linear),Ablation,45.4700,4.0700,8614,4340,3.29
+EdgeOff,Ablation,45.8800,4.0700,8380,5455,4.23
+MARDAM,Literature,45.0200,1.6200,,,2.27
+AM,Literature,49.2200,4.6900,8385,7623,11.81
+PolyNet,Literature,49.1800,4.9700,8509,6878,11.72
+Greedy NN,Classical,58.6900,6.5400,,,33.33

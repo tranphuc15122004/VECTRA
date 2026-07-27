@@ -1,0 +1,7 @@
+regime,ownership_delta,lookahead_delta,edge_delta,mlp_delta,all_delta
+ID_n50m3,2.66,1.61,4.23,3.28,3.11
+Burst_Dynamic,2.27,5.30,3.74,3.10,1.66
+Scale_n100m5,3.12,1.70,3.37,6.00,2.86
+Fleet_n50m6,3.54,3.39,-0.10,-1.59,4.22
+Sparse_Spatial,2.49,-2.16,4.71,-0.04,-0.09
+Tight_TW,2.60,5.17,4.05,2.27,2.77

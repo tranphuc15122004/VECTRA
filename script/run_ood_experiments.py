@@ -15,16 +15,16 @@ from typing import Any
 
 
 VECTRA_MODELS = {
-    "vectra": ("MODEL/infer.py", "data/vectra/args.json", "data/vectra/chkpt_best.pyth"),
-    "b0": ("MODEL/infer.py", "data/_Ablation/B0/args.json", "data/_Ablation/B0/chkpt_best.pyth"),
-    "b1": ("MODEL/infer.py", "data/_Ablation/B1/args.json", "data/_Ablation/B1/chkpt_best.pyth"),
-    "b3": ("MODEL/infer.py", "data/_Ablation/B3/args.json", "data/_Ablation/B3/chkpt_best.pyth"),
-    "b5": ("MODEL/infer.py", "data/_Ablation/B5/args.json", "data/_Ablation/B5/chkpt_best.pyth"),
-    "edgeoff": ("MODEL/infer.py", "data/_Ablation/Edgeoff/args.json", "data/_Ablation/Edgeoff/chkpt_best.pyth"),
-    "no_ownership": ("MODEL/infer.py", "output/ablation/no_ownership/seed42/args.json", "output/ablation/no_ownership/seed42/chkpt_best.pyth"),
-    "no_lookahead": ("MODEL/infer.py", "output/ablation/no_lookahead/seed42/args.json", "output/ablation/no_lookahead/seed42/chkpt_best.pyth"),
+    "vectra": ("MODEL/infer.py", "output/Model_DVRPTWn50m3_260311-0727/args.json", "output/Model_DVRPTWn50m3_260311-0727/chkpt_best.pyth"),
+    "b0": ("MODEL/infer.py", "output/ablation/b0/seed42/args.json", "output/ablation/b0/seed42/chkpt_best.pyth"),
+    "b1": ("MODEL/infer.py", "output/ablation/b1/seed42/args.json", "output/ablation/b1/seed42/chkpt_best.pyth"),
+    "b3": ("MODEL/infer.py", "output/ablation/b3/seed42/args.json", "output/ablation/b3/seed42/chkpt_best.pyth"),
+    "b5": ("MODEL/infer.py", "output/ablation/b5/seed42/args.json", "output/ablation/b5/seed42/chkpt_best.pyth"),
+    "edgeoff": ("MODEL/infer.py", "output/ablation/edgeoff/seed42/args.json", "output/ablation/edgeoff/seed42/chkpt_best.pyth"),
+    "no_ownership": ("MODEL/infer.py", "output/ablation/no_ownership/args.json", "output/ablation/no_ownership/chkpt_best.pyth"),
+    "no_lookahead": ("MODEL/infer.py", "output/ablation/no_lookahead/args.json", "output/ablation/no_lookahead/chkpt_best.pyth"),
 }
-MARDAM_MODEL = ("MODEL/infer_mardam.py", "data/mardam/args.json", "data/mardam/chkpt_best.pyth")
+MARDAM_MODEL = ("MODEL/infer_mardam.py", "output/Mardam_DVRPTWn50m3_260315-1328/args.json", "output/Mardam_DVRPTWn50m3_260315-1328/chkpt_best.pyth")
 
 
 def parse_args() -> argparse.Namespace:

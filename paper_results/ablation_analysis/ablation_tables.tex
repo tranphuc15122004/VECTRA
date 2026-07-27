@@ -1,0 +1,31 @@
+\begin{table}[t]
+\centering
+\caption{Multi-Scale Ablation: all 7 variants evaluated across 6 test regimes.}
+\label{tab:ablation_multi_scale}
+\small\begin{tabular}{lrrrrrr}
+\toprule
+Model & ID (n50,m3) & Burst & Scale n100 & Fleet & Sparse & Tight TW \\ \midrule
+COAST & $44.02\pm3.99$ & $46.92\pm5.07$ & $94.53\pm5.75$ & $21.31\pm3.61$ & $52.98\pm4.96$ & $46.13\pm3.20$ \\
+B0 & $45.39\pm4.09$ & $47.70\pm4.52$ & $97.23\pm6.28$ & $22.21\pm3.29$ & $52.94\pm5.18$ & $47.41\pm3.47$ \\
+B1 & $45.28\pm4.14$ & $48.00\pm4.49$ & $97.51\pm6.27$ & $23.09\pm3.30$ & $53.94\pm5.40$ & $47.26\pm3.44$ \\
+B3 & $44.84\pm4.08$ & $47.39\pm4.45$ & $96.78\pm6.27$ & $22.21\pm3.30$ & $54.03\pm5.05$ & $47.10\pm3.54$ \\
+B5 & $45.47\pm4.07$ & $48.37\pm5.13$ & $100.21\pm9.20$ & $20.97\pm3.19$ & $52.96\pm5.00$ & $47.18\pm3.46$ \\
+EdgeOff & $45.88\pm4.07$ & $48.67\pm4.56$ & $97.72\pm5.96$ & $21.29\pm3.32$ & $55.48\pm5.34$ & $48.00\pm3.42$ \\
+no_ownership & $45.19\pm4.09$ & $47.98\pm4.83$ & $97.48\pm6.26$ & $22.06\pm3.43$ & $54.30\pm5.27$ & $47.34\pm3.53$ \\
+no_lookahead & $44.73\pm4.03$ & $49.41\pm5.40$ & $96.14\pm6.10$ & $22.03\pm3.30$ & $51.84\pm4.85$ & $48.52\pm4.04$ \\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Remove-One: cost increase when removing each component (positive = component helps).}
+\label{tab:remove_one}
+\small\begin{tabular}{lrrrrr}
+\toprule
+Regime & $-$Ownership & $-$Lookahead & $-$Edge & $-$MLP & All \\ \midrule
+ID (n50,m3) & $+2.66\%$ & $+1.61\%$ & $+4.23\%$ & $+3.28\%$ & $+3.11\%$ \\
+Burst & $+2.27\%$ & $+5.30\%$ & $+3.74\%$ & $+3.10\%$ & $+1.66\%$ \\
+Scale n100 & $+3.12\%$ & $+1.70\%$ & $+3.37\%$ & $+6.00\%$ & $+2.86\%$ \\
+Fleet & $+3.54\%$ & $+3.39\%$ & $-0.10\%$ & $-1.59\%$ & $+4.22\%$ \\
+Sparse & $+2.49\%$ & $-2.16\%$ & $+4.71\%$ & $-0.04\%$ & $-0.09\%$ \\
+Tight TW & $+2.60\%$ & $+5.17\%$ & $+4.05\%$ & $+2.27\%$ & $+2.77\%$ \\
+\bottomrule\end{tabular}\end{table}

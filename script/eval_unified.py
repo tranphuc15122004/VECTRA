@@ -93,6 +93,7 @@ def main():
     parser.add_argument("--seeds", default="42,123,456,789,1024",
                         help="Comma-separated seed list")
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--profile", default=None, help="Specific profile to evaluate (e.g. vectra, b0). If not provided, runs all.")
     args = parser.parse_args()
     
     seeds = [int(s) for s in args.seeds.split(",")]
@@ -111,6 +112,11 @@ def main():
         "EdgeOff": "edgeoff",
     }
     
+    if args.profile:
+        profiles = {k: v for k, v in profiles.items() if v == args.profile}
+        if not profiles:
+            profiles = {args.profile.capitalize(): args.profile}
+
     all_results = {}
     for model_name, profile in profiles.items():
         print(f"\n{'='*50}")

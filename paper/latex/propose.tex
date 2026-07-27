@@ -1,0 +1,280 @@
+% !TEX root = main_AAAI.tex
+\section{Methodology}\label{sec:method}
+
+This section presents the COAST architecture and its training procedure.
+Table~\ref{tab:notation} summarizes the main notation.
+
+\subsection{Policy Overview}\label{sec:policy_overview}
+
+Existing neural routing policies typically produce a selection score through a single compatibility function between vehicle and customer representations~\cite{kool2019attention}, which conflates immediate feasibility assessment with fleet-level coordination and future planning.
+When these signals interfere, the policy gradient receives mixed learning signals that slow convergence and limit generalization under distribution shifts.
+
+COAST instead decomposes the customer-selection score into three independently computed signals combined by a learned fusion mechanism.
+At each step $t$, given state $s_t$ and active vehicle $k_t$, the policy is:
+\[
+\pi_\theta(a_t \mid s_t, k_t)
+=
+\frac{\exp\!\big(S_\theta(a_t \mid s_t, k_t)\big)}
+{\displaystyle\sum_{u \in \mathcal{A}(s_t, k_t)} \exp\!\big(S_\theta(u \mid s_t, k_t)\big)},
+\]
+where $\mathcal{A}(s_t, k_t)$ is the feasible action set and the composite score is:
+\[
+S_\theta(j \mid s_t, k_t) = \phi_{fuse}\!\left(\tilde{S}^{att}_j,\; \tilde{S}^{owner}_j,\; \tilde{S}^{look}_j\right).
+\]
+The three signals are:
+\begin{itemize}
+    \item $S^{att}$: a \textit{local compatibility score} quantifying vehicle--customer fit given current spatial, temporal, and capacity constraints;
+    \item $S^{owner}$: a \textit{coordination bias} derived from per-vehicle memory, encoding implicit fleet-level assignment of customer $j$ to vehicle $k_t$;
+    \item $S^{look}$: a \textit{candidate-conditioned lookahead estimate} of the downstream routing consequence of committing to customer $j$.
+\end{itemize}
+
+\subsection{Model Architecture}\label{sec:model_architecture}
+
+\paragraph{Customer graph encoding.}
+We encode customers using a Transformer-based graph encoder~\cite{vaswani2017attention} that produces contextual embeddings capturing inter-customer relational structure.
+Depot and customer nodes use separate linear projections since they play structurally different roles:
+\[
+\mathbf{h}_j^{(0)} =
+\begin{cases}
+\mathbf{W}_{dep}\,\mathbf{x}_j, & j = 0 \\
+\mathbf{W}_{cust}\,\mathbf{x}_j, & j \geq 1
+\end{cases}
+\]
+where $\mathbf{x}_j \in \mathbb{R}^{D_c}$ is the raw feature vector.
+Since geographic proximity is a strong signal for routing quality but may not emerge reliably from content-based attention alone, we augment each attention layer with a distance-aware bias: a 16-bin RBF encoding of normalized pairwise distance $d_{ij} \in [0,1]$,
+\[
+\mathrm{RBF}_k(d) = \exp\!\left(-\frac{(d - \mu_k)^2}{2\sigma^2}\right),
+\]
+with 16 evenly-spaced centres $\mu_k = (k-1)/15$, $k=1,\ldots,16$, and bandwidth $\sigma = 1/15$.
+The 16-dimensional encoding is projected by an MLP to a per-head scalar bias $b_{ij}^{(l,h)}$ added to the attention logit.
+Each layer applies two post-norm residual sublayers~\cite{vaswani2017attention}.
+Letting $\mathrm{MHA}_i^{(l)} = \mathbf{W}_{out}^{(l)}\!\left[\bigoplus_{h=1}^{H}\sum_j \alpha_{ij}^{(l,h)}\mathbf{v}_j^{(l,h)}\right]$ denote the multi-head attention output:
+\begin{align*}
+\hat{\mathbf{h}}_i^{(l)} &= \mathrm{LN}\!\left(\mathbf{h}_i^{(l)} + \mathrm{MHA}_i^{(l)}\right), \\
+\mathbf{h}_i^{(l+1)} &= \mathrm{LN}\!\left(\hat{\mathbf{h}}_i^{(l)} + \mathrm{FFN}\!\left(\hat{\mathbf{h}}_i^{(l)}\right)\right).
+\end{align*}
+The final customer representation is $\mathbf{c}_j = \mathrm{Dropout}(\mathbf{W}_c\,\mathbf{h}_j^{(L)}) \in \mathbb{R}^D$.
+In the dynamic setting, encodings are recomputed whenever new orders become visible.
+
+\paragraph{Acting vehicle encoding.}
+Only the active vehicle $k_t$ is encoded at each step --- full fleet re-encoding at every step is wasteful and unnecessary since inter-vehicle coordination is handled by CoordinationMemory rather than vehicle-to-vehicle attention.
+The vehicle state $\mathbf{s}_{k_t} = (x, y, q^{rem}, t^{cur}) \in \mathbb{R}^4$ is projected and refined through $L$ layers of cross-attention over $H^{cust}$, restricted to the feasible action set:
+\[
+h^{act} = \mathbf{W}_v\;\mathrm{FleetEncoder}\!\bigl(\mathbf{W}_{in}\,\mathbf{s}_{k_t},\; H^{cust},\; \mathcal{A}(s_t,k_t)\bigr),
+\]
+where $h^{act} \in \mathbb{R}^{N \times 1 \times D}$.
+
+\paragraph{Edge feature encoding}
+Node-level representations capture global structure but cannot express the state-dependent interaction between a specific vehicle and a specific candidate at this step.
+Two customers equidistant from the vehicle may differ radically in time-window compatibility, waiting time, or remaining capacity fit.
+We therefore construct an 8-dimensional edge feature vector $\mathbf{e}_{ij} \in \mathbb{R}^8$ for each (vehicle $k_t$, candidate $j$) pair:
+
+\medskip
+\begin{center}
+\begin{tabular}{@{} l l p{1.65in} @{}}
+\toprule
+Feature & Symbol & Definition \\
+\midrule
+Distance       & $d_{ij}$    & $\|\mathbf{p}_{k_t} - \mathbf{p}_j\|_2$ \\
+Travel time    & $\tau_{ij}$ & $d_{ij} / v$ \\
+Arrival time   & $a_{ij}$    & $t^{cur}_{k_t} + \tau_{ij}$ \\
+Waiting time   & $w_{ij}$    & $\max(tw^{start}_j - a_{ij},\,0)$ \\
+Lateness       & $l_{ij}$    & $\max(a_{ij} - tw^{end}_j,\,0)$ \\
+Time slack     & $s_{ij}$    & $tw^{end}_j - a_{ij}$ \\
+Feasibility    & $f_{ij}$    & 1 if $j$ is capacity- and time-feasible, else 0 \\
+Capacity gap   & $g_{ij}$    & $q^{rem}_{k_t} - d(j)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\medskip
+
+Together these features encode whether the vehicle arrives on time, how much schedule slack remains, and whether capacity is sufficient --- information that changes at every step as the vehicle's state evolves.
+The features are encoded through a two-layer MLP with layer normalization:
+\[
+\mathbf{e}_{ij}^{emb} = \mathrm{LN}\!\left(\mathbf{W}_{e2}\,\mathrm{ReLU}\!\left(\mathbf{W}_{e1}\,\mathbf{e}_{ij}\right)\right) \in \mathbb{R}^D,
+\]
+yielding the full edge tensor $H^{edge} \in \mathbb{R}^{N \times 1 \times L_c \times D}$.
+
+\paragraph{Local compatibility via edge-aware scoring.}
+Standard attention scoring~\cite{kool2019attention} computes vehicle--customer compatibility from node-level representations that are oblivious to the specific interaction at this step.
+The CrossEdgeFusion module injects the per-pair edge embedding as an additive bias into multi-head attention logits:
+\[
+u_j^{(h)} = \frac{\mathbf{q}^{(h)} \cdot \mathbf{k}_j^{(h)}}{\sqrt{d_h}} + \mathbf{e}_j^{emb} \cdot \mathbf{w}_{bias}^{(h)},
+\]
+where $\mathbf{q}^{(h)} = h^{act}\mathbf{W}_Q^{(h)}$ and $\mathbf{k}_j^{(h)} = \mathbf{c}_j\mathbf{W}_K^{(h)}$.
+The compatibility score averages the pre-softmax logits across heads:
+\[
+S^{att}_j = \frac{1}{H}\sum_{h=1}^{H} u_j^{(h)} \in \mathbb{R}^{N \times 1 \times L_c}.
+\]
+No softmax is applied inside CrossEdgeFusion; the single softmax over all candidates is deferred to the final action selection stage after all three signals are fused, ensuring that inter-candidate probability mass is distributed over the most informative composite signal.
+
+\paragraph{Coordination through memory and ownership.}
+Without a coordination mechanism, the policy may route multiple vehicles toward the same customer clusters while neglecting others.
+Explicit fleet-level communication at every step is computationally heavy and unnecessary when softer implicit signals suffice.
+
+We instead equip each vehicle with a private latent memory $\mathbf{m}_k^{(t)} \in \mathbb{R}^{H_m}$, initialized to zero, that summarizes its routing history.
+After vehicle $k_t$ selects customer $j^*$, its memory is updated via a bounded, GRU-like recurrence:
+\[
+\mathbf{m}_{k_t}^{(t+1)} = \tanh\!\left(\mathbf{W}_{in}\!\left[\,h^{act},\;\mathbf{c}_{j^*},\;\mathbf{e}_{k_t j^*}^{emb}\,\right] + \mathbf{W}_{hid}\,\mathbf{m}_{k_t}^{(t)}\right).
+\]
+Only the acting vehicle's memory slot is updated; all others remain unchanged.
+
+This per-vehicle memory supports an OwnershipHead that computes a soft fleet-level customer assignment.
+A vehicle whose memory is strongly aligned with customer $j$ has implicitly claimed it through prior routing choices.
+The assignment logits are computed via a bilinear interaction over all vehicles:
+\[
+o_{ik} = \frac{(\mathbf{W}_{veh}\,\mathbf{m}_i^{(t)}) \cdot (\mathbf{W}_{cust}\,\mathbf{c}_k)^\top}{\sqrt{D}},
+\]
+and the coordination bias for vehicle $k_t$ is the log-relative ownership over the fleet:
+\[
+S^{owner}_j
+= \log\!\left(\frac{\exp(o_{k_t,j})}{\sum_{i'=1}^{L_v}\exp(o_{i',j})}\right),
+\quad S^{owner} \in \mathbb{R}^{N \times 1 \times L_c}.
+\]
+Using log-probability ensures the ownership signal is well-scaled relative to the other scores, and the softmax across vehicles encodes \textit{relative} claim --- a high $S^{owner}_j$ means vehicle $k_t$ is the strongest claimant among all vehicles.
+Neither the OwnershipHead nor the memory update imposes any auxiliary supervised loss; both are shaped entirely by the policy gradient, allowing coordination semantics to emerge from optimizing routing performance.
+
+\paragraph{Candidate-conditioned lookahead estimation.}
+A policy that maximizes immediate feasibility may still be myopic: selecting a nearby customer can leave the vehicle in a position that violates time windows of unserved neighbors, or forces an early depot return due to capacity exhaustion.
+A global state value $V(s_t)$ cannot differentiate between candidates and therefore offers no guidance at the action level.
+
+The LookaheadHead produces a per-candidate scalar that estimates the downstream routing consequence of committing to customer $j$:
+\[
+S^{look}_j = \mathbf{W}_{\ell 2}\;\mathrm{Dropout}\!\bigl(\mathrm{ReLU}\bigl(\mathbf{W}_{\ell 1}
+\bigl[\,h^{act},\;\mathbf{c}_j,\;\mathbf{e}_{ij}^{emb}\,\bigr]\bigr)\bigr),
+\]
+producing a per-candidate scalar ($S^{look}_j \in \mathbb{R}$) conditioned on the vehicle's current state, the candidate's global embedding, and their dynamic interaction.
+Critically, this head carries no explicit regression target --- $S^{look}$ is shaped entirely through the policy gradient, which drives the fusion MLP to weight lookahead appropriately when it reduces long-term routing cost.
+
+\paragraph{Multi-signal score fusion.}
+The three signals are computed by different mechanisms and operate on incompatible numerical scales.
+To normalize them before fusion, we apply mask-aware z-normalization over the feasible candidates for each signal independently.
+For each $j \in \mathcal{A}(s_t, k_t)$:
+\[
+\tilde{S}^{(\cdot)}_j = \frac{S^{(\cdot)}_j - \mu^{(\cdot)}}{\sqrt{(\sigma^{(\cdot)})^2 + \varepsilon}},
+\]
+where $\mu^{(\cdot)}$ and $\sigma^{(\cdot)}$ are the mean and standard deviation computed \emph{only} over feasible candidates; scores for infeasible positions are subsequently set to $-\infty$ before the final softmax.
+
+The normalized signals are fused by a compact two-layer MLP:
+\[
+S^{final}_j = \mathbf{W}_{f2}\;\mathrm{ReLU}\!\left(\mathbf{W}_{f1}\!\left[\,\tilde{S}^{att}_j,\;\tilde{S}^{owner}_j,\;\tilde{S}^{look}_j\,\right]\right),
+\]
+with $\mathbf{W}_{f1} \in \mathbb{R}^{64 \times 3}$ and $\mathbf{W}_{f2} \in \mathbb{R}^{1 \times 64}$.
+A fixed-weight sum cannot adapt to the fact that ownership is uninformative early in an episode but becomes the dominant coordination cue later; the MLP learns these context-dependent interaction weights through the policy gradient.
+An optional tanh scaling bounds the magnitude: $S^{final}_j \leftarrow \beta_0 \cdot \tanh(S^{final}_j)$.
+
+\subsection{Training Objective}\label{sec:training_objective}
+
+COAST is trained end-to-end using REINFORCE~\cite{nazari2018reinforcement} with a learned critic baseline.
+The critic $b_\phi$ and the LookaheadHead play strictly separate roles: $b_\phi$ is a state-level variance-reducing baseline that is agnostic to the action chosen, while $S^{look}$ is an action-conditioned routing guide.
+Conflating them would couple value estimation with the scoring mechanism, degrading both.
+
+\paragraph{Policy gradient with critic baseline.}
+The policy loss is:
+\[
+\mathcal{L}_{policy}(\theta)
+=
+-\mathbb{E}_{\tau \sim \pi_\theta}\!\left[\sum_{t=0}^{T} \log \pi_\theta(a_t \mid s_t, k_t)\, A_t \right],
+\]
+where $A_t = R_t - b_\phi(s_t)$ is the advantage, $R_t = \sum_{k=t}^T r_k$ is the cumulative return, and the critic is trained with:
+\[
+\mathcal{L}_{critic}(\phi)
+=
+\mathbb{E}\!\left[\sum_{t=0}^{T} \mathrm{SmoothL1}\!\left(b_\phi(s_t),\; R_t\right)\right].
+\]
+Smooth-L1 is used for robustness to the return variance induced by stochastic customer arrivals.
+Advantage estimates are batch-normalized before computing $\mathcal{L}_{policy}$.
+
+\paragraph{Combined objective.}
+We augment with an entropy term to prevent premature convergence across the diverse instance distribution:
+\begin{align*}
+\mathcal{L}(\theta, \phi)
+&= \mathcal{L}_{policy}(\theta)
++ \alpha\; \mathcal{L}_{critic}(\phi) \\
+&\quad -\,\beta\;\mathbb{E}\!\left[\sum_{t=0}^{T}
+  \mathcal{H}\!\left(\pi_\theta(\cdot \mid s_t, k_t)\right)\right],
+\end{align*}
+with $\beta = 0.01$.
+The LookaheadHead and OwnershipHead carry no auxiliary losses; both receive gradient signal exclusively through $S^{final}$ via the policy gradient.
+
+\subsection{Discussion}\label{sec:method_discussion}
+
+The design of COAST reflects three structural inductive biases aligned with dynamic multi-vehicle routing.
+
+\textit{Edge features as first-class routing context.}
+Static node embeddings encode global relational structure but cannot express how vehicle state and customer constraints interact at a given step.
+The explicit construction of per-pair edge features --- encoding time slack, lateness, capacity gap, and feasibility --- allows the scoring mechanism to react immediately to changes in vehicle state without waiting for global re-encoding.
+This is the primary mechanism through which COAST achieves constraint-awareness at decision time.
+
+\textit{Communication-free fleet coordination via emergent ownership.}
+Explicit inter-vehicle communication or full fleet re-encoding at every step adds overhead proportional to fleet size and introduces gradient coupling between vehicles.
+The per-vehicle memory and OwnershipHead provide a scalable alternative: coordination emerges implicitly from each vehicle's trajectory history, naturally inducing spatial specialization without any vehicle-to-vehicle attention.
+The ownership signal is shaped purely by routing performance, not by any auxiliary supervision, so the coordination structure it encodes reflects what actually improves fleet efficiency.
+
+\textit{Action-conditioned lookahead without a supervised target.}
+The LookaheadHead differs from standard value-based approaches in that it produces per-candidate estimates without being constrained to approximate any specific quantity such as $Q(s_t, a_t)$.
+By training entirely through the policy gradient, the lookahead signal is free to encode whatever combination of vehicle state, candidate embedding, and edge interaction best reduces myopic decisions --- including routing consequences that are difficult to formalize analytically.
+Its separation from the critic baseline preserves the action-independence required for an unbiased gradient estimator while allowing the per-candidate signal to carry independent predictive content.
+
+\begin{table}[t]
+\centering
+\caption{Summary of main notations used in Section~\ref{sec:method}.}
+\label{tab:notation}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{ll}
+\toprule
+\textbf{Symbol} & \textbf{Description} \\
+\midrule
+
+\multicolumn{2}{l}{\textit{Decision process}} \\
+$t$                          & Decision step index \\
+$s_t$                        & Environment state at step $t$ \\
+$k_t$                        & Index of the active vehicle at step $t$ \\
+$a_t$                        & Selected customer (action) \\
+$\mathcal{A}(s_t, k_t)$      & Feasible action set for vehicle $k_t$ \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Problem dimensions}} \\
+$N$   & Batch size \\
+$L_c$ & Number of customers including depot \\
+$L_v$ & Number of vehicles \\
+$D$   & Embedding dimension \\
+$H$   & Number of attention heads \\
+$H_m$ & Coordination memory hidden size \\
+$H_\ell$ & Lookahead MLP hidden size \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Input features}} \\
+$\mathbf{x}_j \in \mathbb{R}^{D_c}$      & Raw feature vector of customer or depot $j$ \\
+$\mathbf{s}_{k_t} \in \mathbb{R}^4$       & State of active vehicle: $(x, y, q^{rem}, t^{cur})$ \\
+$\mathbf{e}_{ij} \in \mathbb{R}^8$        & Raw edge feature vector for pair (vehicle $k_t$, candidate $j$) \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Learned representations}} \\
+$\mathbf{c}_j \in \mathbb{R}^D$,\; $H^{cust} \in \mathbb{R}^{N \times L_c \times D}$               & Customer embeddings from GraphEncoder \\
+$h^{act} \in \mathbb{R}^{N \times 1 \times D}$                                                       & Active vehicle embedding (one vehicle encoded per step) \\
+$\mathbf{e}_{ij}^{emb} \in \mathbb{R}^D$,\; $H^{edge} \in \mathbb{R}^{N \times 1 \times L_c \times D}$ & Encoded edge features \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Scoring signals}} \\
+$S^{att}   \in \mathbb{R}^{N \times 1 \times L_c}$ & Local compatibility score (CrossEdgeFusion) \\
+$S^{owner} \in \mathbb{R}^{N \times 1 \times L_c}$ & Ownership coordination bias (log-probability) \\
+$S^{look}  \in \mathbb{R}^{N \times 1 \times L_c}$ & Candidate-conditioned lookahead estimate \\
+$S^{final} \in \mathbb{R}^{N \times 1 \times L_c}$ & Fused routing score \\
+$\tilde{S}^{(\cdot)}$                               & Z-normalized version of each signal \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Coordination memory}} \\
+$\mathbf{m}_k^{(t)} \in \mathbb{R}^{H_m}$    & Memory state of vehicle $k$ at step $t$ \\
+$M_t \in \mathbb{R}^{N \times L_v \times H_m}$ & Full fleet memory tensor at step $t$ \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Policy and learning}} \\
+$\pi_\theta(a_t \mid s_t, k_t)$  & Routing policy parameterized by $\theta$ \\
+$R_t$                            & Cumulative return from step $t$ \\
+$b_\phi(s_t) \in \mathbb{R}$     & Learned critic baseline (distinct from LookaheadHead) \\
+$A_t = R_t - b_\phi(s_t)$        & Advantage estimate \\
+$\alpha,\,\beta$                 & Critic weight and entropy coefficient \\
+\bottomrule
+\end{tabular}}
+\end{table}

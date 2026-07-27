@@ -4,15 +4,34 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
-import shlex
-import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from openpyxl import Workbook
+
+import torch
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from MODEL.infer import (
+    _build_env_params,
+    _check_route_constraints,
+    _clone_dataset,
+    _compute_cost_components,
+    _dataset_cls,
+    _environment_cls,
+    _init_model,
+    _load_model_weights_or_raise,
+    _replay_routes_cost,
+    _route_diag_for_instance,
+    _run_inference,
+    parse_infer_args,
+)
+from utils import set_random_seed
 
 
 def parse_args() -> argparse.Namespace:
@@ -147,8 +166,45 @@ def parse_infer_json(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_one(
-    args: argparse.Namespace,
+def _save_infer_payload(
+    path: Path,
+    routes,
+    costs,
+    raw_replay_costs,
+    route_diagnostics,
+    constraint_diagnostics,
+    raw_cost_components,
+    normalized_cost_components,
+    inference_time,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "inference_time": inference_time,
+        "costs": [float(v) for v in costs.cpu().tolist()],
+        "normalized_costs": [float(v) for v in costs.cpu().tolist()],
+        "raw_replay_costs": [float(v) for v in raw_replay_costs.cpu().tolist()],
+        "skipped_customers_count": [int(d.get("missing_count", 0)) for d in route_diagnostics],
+        "total_skipped_customers": int(sum(int(d.get("missing_count", 0)) for d in route_diagnostics)),
+        "route_diagnostics": route_diagnostics,
+        "tw_violations_count": [int(d.get("tw_violation_count", 0)) for d in constraint_diagnostics],
+        "appearance_violations_count": [int(d.get("appearance_violation_count", 0)) for d in constraint_diagnostics],
+        "total_tw_violations": int(sum(int(d.get("tw_violation_count", 0)) for d in constraint_diagnostics)),
+        "total_appearance_violations": int(sum(int(d.get("appearance_violation_count", 0)) for d in constraint_diagnostics)),
+        "constraint_diagnostics": constraint_diagnostics,
+        "raw_cost_components": raw_cost_components,
+        "normalized_cost_components": normalized_cost_components,
+        "routes": routes,
+    }
+    ensure_dir(path.parent)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return payload
+
+
+def run_one_inproc(
+    infer_args: argparse.Namespace,
+    learner: torch.nn.Module,
+    dataset_cls: type,
+    env_cls: type,
+    device: torch.device,
     csv_path: Path,
     datasets_root: Path,
     per_case_root: Path,
@@ -160,84 +216,85 @@ def run_one(
     ensure_dir(result_json.parent)
     ensure_dir(log_path.parent)
 
-    cmd = [
-        args.python_executable,
-        str(args.infer_script),
-        "--problem-type",
-        args.problem_type,
-        "--config-file",
-        str(args.config_file),
-        "--model-weight",
-        str(args.model_weight),
-        "--vehicles-count",
-        str(args.vehicles_count),
-        "--veh-capa",
-        str(args.veh_capa),
-        "--veh-speed",
-        _format_cli_number(args.veh_speed),
-        "--max-print-instances",
-        str(args.max_print_instances),
-        "--verify-rollouts",
-        str(args.verify_rollouts),
-        "--data-csv",
-        str(csv_path),
-        "--save-json",
-        str(result_json),
-    ]
-    if args.no_verify_routes:
-        cmd.append("--no-verify-routes")
-    if args.sample:
-        cmd.append("--sample")
-    elif args.greedy:
-        cmd.append("--greedy")
-    for extra in args.extra_arg:
-        cmd.append(extra)
-
-    env = os.environ.copy()
-    env["MKL_SERVICE_FORCE_INTEL"] = "1"
-
     start = time.perf_counter()
-    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
-    duration_sec = time.perf_counter() - start
-
-    with log_path.open("w", encoding="utf-8") as f:
-        f.write("COMMAND:\n")
-        f.write(" ".join(shlex.quote(x) for x in cmd) + "\n\n")
-        f.write("RETURN_CODE:\n")
-        f.write(str(proc.returncode) + "\n\n")
-        f.write("STDOUT:\n")
-        f.write(proc.stdout)
-        f.write("\n\nSTDERR:\n")
-        f.write(proc.stderr)
-
-    row: dict[str, Any] = {
-        "dataset_relpath": str(rel),
-        "dataset_abspath": str(csv_path.resolve()),
-        "status": "ok" if proc.returncode == 0 else "failed",
-        "return_code": proc.returncode,
-        "duration_sec": round(duration_sec, 6),
-        "result_json": str(result_json),
-        "run_log": str(log_path),
-        "command": " ".join(shlex.quote(x) for x in cmd),
-        "error_message": "",
-    }
-
-    if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout or "").strip().splitlines()
-        row["error_message"] = err[-1] if err else "inference failed"
-        return row
-
-    if not result_json.exists():
-        row["status"] = "failed"
-        row["error_message"] = "infer finished without writing save-json output"
-        return row
-
     try:
-        payload = json.loads(result_json.read_text(encoding="utf-8"))
+        data = dataset_cls.from_csv(
+            str(csv_path),
+            veh_count=infer_args.vehicles_count,
+            veh_capa=infer_args.veh_capa,
+            veh_speed=infer_args.veh_speed,
+        )
+        raw_data = _clone_dataset(data)
+        if not infer_args.no_normalize:
+            data.normalize()
+
+        env_params = _build_env_params(infer_args)
+        env = env_cls(data, None, None, *env_params)
+        env.nodes = env.nodes.to(device)
+        if env.init_cust_mask is not None:
+            env.init_cust_mask = env.init_cust_mask.to(device)
+
+        routes, costs = _run_inference(infer_args, env, learner)
+
+        raw_cost_components = _compute_cost_components(
+            raw_data, routes, infer_args.pending_cost, infer_args.late_cost,
+        )
+        normalized_cost_components = _compute_cost_components(
+            data, routes, infer_args.pending_cost, infer_args.late_cost,
+        )
+        raw_replay_costs = _replay_routes_cost(
+            raw_data, env_cls, env_params, routes, rollouts=infer_args.verify_rollouts,
+        )
+        route_diagnostics = [
+            _route_diag_for_instance(data, routes, idx) for idx in range(len(routes))
+        ]
+        constraint_diagnostics = _check_route_constraints(raw_data, routes)
+        inference_time = time.perf_counter() - start
+
+        payload = _save_infer_payload(
+            result_json, routes, costs, raw_replay_costs,
+            route_diagnostics, constraint_diagnostics,
+            raw_cost_components, normalized_cost_components,
+            inference_time,
+        )
+
+        with log_path.open("w", encoding="utf-8") as f:
+            f.write(f"Inference (in-process) on {csv_path}\n")
+            f.write(f"Duration: {inference_time:.6f}s\n")
+            f.write(f"Status: ok\n")
+
+        row: dict[str, Any] = {
+            "dataset_relpath": str(rel),
+            "dataset_abspath": str(csv_path.resolve()),
+            "status": "ok",
+            "return_code": 0,
+            "duration_sec": round(inference_time, 6),
+            "result_json": str(result_json),
+            "run_log": str(log_path),
+            "command": "",
+            "error_message": "",
+        }
         row.update(parse_infer_json(payload))
-    except Exception as exc:  # noqa: BLE001
-        row["status"] = "failed"
-        row["error_message"] = f"cannot parse infer json: {exc}"
+
+    except Exception as exc:
+        duration_sec = time.perf_counter() - start
+        with log_path.open("w", encoding="utf-8") as f:
+            f.write(f"Inference (in-process) on {csv_path}\n")
+            f.write(f"Duration: {duration_sec:.6f}s\n")
+            f.write(f"Status: failed\n")
+            f.write(f"Error: {exc}\n")
+        row = {
+            "dataset_relpath": str(rel),
+            "dataset_abspath": str(csv_path.resolve()),
+            "status": "failed",
+            "return_code": 1,
+            "duration_sec": round(duration_sec, 6),
+            "result_json": str(result_json) if result_json.exists() else "",
+            "run_log": str(log_path),
+            "command": "",
+            "error_message": str(exc),
+        }
+
     return row
 
 
@@ -258,6 +315,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writeheader()
         writer.writerows(rows)
 
+
 def write_excel(path: Path, rows: list[dict[str, Any]]) -> None:
     ensure_dir(path.parent)
 
@@ -268,7 +326,6 @@ def write_excel(path: Path, rows: list[dict[str, Any]]) -> None:
         wb.save(path)
         return
 
-    # Collect all keys (preserve order)
     all_keys: list[str] = []
     seen = set()
     for row in rows:
@@ -277,10 +334,8 @@ def write_excel(path: Path, rows: list[dict[str, Any]]) -> None:
                 seen.add(k)
                 all_keys.append(k)
 
-    # Write header
     ws.append(all_keys)
 
-    # Write rows
     for row in rows:
         ws.append([row.get(k, None) for k in all_keys])
 
@@ -291,22 +346,51 @@ def main() -> int:
     args = parse_args()
 
     datasets_root = args.datasets_root.resolve()
-    infer_script = args.infer_script.resolve()
     config_file = args.config_file.resolve()
     model_weight = args.model_weight.resolve()
 
     if not datasets_root.exists():
         raise FileNotFoundError(f"datasets root not found: {datasets_root}")
-    if not infer_script.exists():
-        raise FileNotFoundError(f"infer script not found: {infer_script}")
     if not config_file.exists():
         raise FileNotFoundError(f"config file not found: {config_file}")
     if not model_weight.exists():
         raise FileNotFoundError(f"model weight not found: {model_weight}")
 
-    args.infer_script = infer_script
-    args.config_file = config_file
-    args.model_weight = model_weight
+    infer_argv = [
+        "--config-file", str(config_file),
+        "--model-weight", str(model_weight),
+        "--problem-type", args.problem_type,
+        "--vehicles-count", str(args.vehicles_count),
+        "--veh-capa", str(args.veh_capa),
+        "--veh-speed", _format_cli_number(args.veh_speed),
+        "--max-print-instances", str(args.max_print_instances),
+        "--verify-rollouts", str(args.verify_rollouts),
+    ]
+    if args.sample:
+        infer_argv.append("--sample")
+    else:
+        infer_argv.append("--greedy")
+    if args.no_verify_routes:
+        infer_argv.append("--no-verify-routes")
+    for extra in args.extra_arg:
+        infer_argv.append(extra)
+
+    infer_args = parse_infer_args(infer_argv)
+
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() and not infer_args.no_cuda else "cpu"
+    )
+    set_random_seed(infer_args.rng_seed, deterministic=True)
+
+    dataset_cls = _dataset_cls(infer_args.problem_type)
+    env_cls = _environment_cls(infer_args.problem_type)
+    if dataset_cls is None or env_cls is None:
+        raise ValueError(f"Unsupported problem type '{infer_args.problem_type}'")
+
+    learner = _init_model(infer_args, dataset_cls, env_cls, device)
+    learner.eval()
+    _load_model_weights_or_raise(infer_args.model_weight, learner)
+    learner.eval()
 
     output_dir = args.output_dir
     if output_dir is None:
@@ -326,12 +410,16 @@ def main() -> int:
         return 1
 
     print(f"Found {len(csv_files)} CSV files")
+    print(f"Loaded model once; processing {len(csv_files)} CSVs in-process")
     rows: list[dict[str, Any]] = []
     failed = 0
 
     for idx, csv_path in enumerate(csv_files, start=1):
         print(f"[{idx}/{len(csv_files)}] infer: {csv_path}")
-        row = run_one(args, csv_path, datasets_root, per_case_root, logs_root)
+        row = run_one_inproc(
+            infer_args, learner, dataset_cls, env_cls, device,
+            csv_path, datasets_root, per_case_root, logs_root,
+        )
         rows.append(row)
         if row.get("status") != "ok":
             failed += 1
@@ -345,11 +433,10 @@ def main() -> int:
     run_meta = {
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "datasets_root": str(datasets_root),
-        "infer_script": str(infer_script),
-        "python_executable": args.python_executable,
-        "problem_type": args.problem_type,
+        "infer_script": str(args.infer_script),
         "config_file": str(config_file),
         "model_weight": str(model_weight),
+        "problem_type": args.problem_type,
         "vehicles_count": args.vehicles_count,
         "veh_capa": args.veh_capa,
         "veh_speed": args.veh_speed,
@@ -366,7 +453,7 @@ def main() -> int:
     }
 
     write_csv(summary_csv, rows)
-    write_excel(summary_excel , rows)
+    write_excel(summary_excel, rows)
     summary_json.write_text(
         json.dumps({"meta": run_meta, "results": rows}, indent=2),
         encoding="utf-8",

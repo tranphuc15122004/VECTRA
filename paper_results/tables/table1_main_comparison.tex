@@ -1,0 +1,13 @@
+\begin{table}[t]
+\centering\caption{In-Distribution Performance (n=50, m=3, 500 instances)}\label{tab:main}
+\begin{tabular}{lcccc}\toprule
+Method & Type & Cost ($\mu\pm\sigma$) & $\Delta$ vs COAST \\ \midrule
+COAST & Proposed & $44.02\pm3.99$ & --- \\
+no\_lookahead & Ablation & $44.73\pm4.03$ & +1.6\% \\
+no\_ownership & Ablation & $45.19\pm4.09$ & +2.7\% \\
+B0 (none) & Ablation & $45.39\pm4.10$ & +3.1\% \\
+MARDAM & Literature & $45.02\pm1.62$ & +2.3\% \\
+AM & Literature & $49.22\pm4.69$ & +11.8\% \\
+PolyNet & Literature & $49.18\pm4.97$ & +11.7\% \\
+Greedy NN & Classical & $58.69\pm6.54$ & +33.3\% \\ \bottomrule
+\end{tabular}\end{table}

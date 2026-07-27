@@ -1,0 +1,350 @@
+{
+  "ID (n50,m3)": {
+    "COAST": {
+      "mean_cost": 44.0193,
+      "std_cost": 3.9867,
+      "n": 500,
+      "tw_violations": 4936,
+      "skipped": 8224
+    },
+    "B0": {
+      "mean_cost": 45.3878,
+      "std_cost": 4.095,
+      "n": 500,
+      "tw_violations": 4373,
+      "skipped": 8484
+    },
+    "B1": {
+      "mean_cost": 45.2813,
+      "std_cost": 4.1358,
+      "n": 500,
+      "tw_violations": 4554,
+      "skipped": 8442
+    },
+    "B3": {
+      "mean_cost": 44.8446,
+      "std_cost": 4.0839,
+      "n": 500,
+      "tw_violations": 4669,
+      "skipped": 8400
+    },
+    "B5": {
+      "mean_cost": 45.4652,
+      "std_cost": 4.065,
+      "n": 500,
+      "tw_violations": 4340,
+      "skipped": 8614
+    },
+    "EdgeOff": {
+      "mean_cost": 45.8833,
+      "std_cost": 4.0738,
+      "n": 500,
+      "tw_violations": 5455,
+      "skipped": 8380
+    },
+    "no_ownership": {
+      "mean_cost": 45.1898,
+      "std_cost": 4.0886,
+      "n": 500,
+      "tw_violations": 4610,
+      "skipped": 8416
+    },
+    "no_lookahead": {
+      "mean_cost": 44.726,
+      "std_cost": 4.0347,
+      "n": 500,
+      "tw_violations": 4346,
+      "skipped": 8487
+    }
+  },
+  "Burst": {
+    "COAST": {
+      "mean_cost": 46.9199,
+      "std_cost": 5.0733,
+      "n": 500,
+      "tw_violations": 5729,
+      "skipped": 8131
+    },
+    "B0": {
+      "mean_cost": 47.699,
+      "std_cost": 4.5245,
+      "n": 500,
+      "tw_violations": 5164,
+      "skipped": 8448
+    },
+    "B1": {
+      "mean_cost": 48.0031,
+      "std_cost": 4.4858,
+      "n": 500,
+      "tw_violations": 5124,
+      "skipped": 8455
+    },
+    "B3": {
+      "mean_cost": 47.3881,
+      "std_cost": 4.4533,
+      "n": 500,
+      "tw_violations": 5472,
+      "skipped": 8337
+    },
+    "B5": {
+      "mean_cost": 48.3732,
+      "std_cost": 5.1298,
+      "n": 500,
+      "tw_violations": 5221,
+      "skipped": 8637
+    },
+    "EdgeOff": {
+      "mean_cost": 48.6739,
+      "std_cost": 4.5554,
+      "n": 500,
+      "tw_violations": 6094,
+      "skipped": 8374
+    },
+    "no_ownership": {
+      "mean_cost": 47.9837,
+      "std_cost": 4.8327,
+      "n": 500,
+      "tw_violations": 5743,
+      "skipped": 8394
+    },
+    "no_lookahead": {
+      "mean_cost": 49.4063,
+      "std_cost": 5.4044,
+      "n": 500,
+      "tw_violations": 4979,
+      "skipped": 8481
+    }
+  },
+  "Scale n100": {
+    "COAST": {
+      "mean_cost": 94.5339,
+      "std_cost": 5.7524,
+      "n": 500,
+      "tw_violations": 7694,
+      "skipped": 19538
+    },
+    "B0": {
+      "mean_cost": 97.2343,
+      "std_cost": 6.2751,
+      "n": 500,
+      "tw_violations": 6719,
+      "skipped": 19972
+    },
+    "B1": {
+      "mean_cost": 97.5139,
+      "std_cost": 6.2694,
+      "n": 500,
+      "tw_violations": 6685,
+      "skipped": 20116
+    },
+    "B3": {
+      "mean_cost": 96.7846,
+      "std_cost": 6.2688,
+      "n": 500,
+      "tw_violations": 7330,
+      "skipped": 19964
+    },
+    "B5": {
+      "mean_cost": 100.2062,
+      "std_cost": 9.1961,
+      "n": 500,
+      "tw_violations": 6485,
+      "skipped": 20982
+    },
+    "EdgeOff": {
+      "mean_cost": 97.7233,
+      "std_cost": 5.9624,
+      "n": 500,
+      "tw_violations": 9368,
+      "skipped": 19697
+    },
+    "no_ownership": {
+      "mean_cost": 97.4803,
+      "std_cost": 6.2623,
+      "n": 500,
+      "tw_violations": 7162,
+      "skipped": 20026
+    },
+    "no_lookahead": {
+      "mean_cost": 96.1412,
+      "std_cost": 6.1018,
+      "n": 500,
+      "tw_violations": 6453,
+      "skipped": 20075
+    }
+  },
+  "Fleet": {
+    "COAST": {
+      "mean_cost": 21.3073,
+      "std_cost": 3.608,
+      "n": 500,
+      "tw_violations": 4329,
+      "skipped": 618
+    },
+    "B0": {
+      "mean_cost": 22.2072,
+      "std_cost": 3.2944,
+      "n": 500,
+      "tw_violations": 3935,
+      "skipped": 913
+    },
+    "B1": {
+      "mean_cost": 23.0909,
+      "std_cost": 3.3005,
+      "n": 500,
+      "tw_violations": 3450,
+      "skipped": 1432
+    },
+    "B3": {
+      "mean_cost": 22.2123,
+      "std_cost": 3.3012,
+      "n": 500,
+      "tw_violations": 3916,
+      "skipped": 1036
+    },
+    "B5": {
+      "mean_cost": 20.9692,
+      "std_cost": 3.186,
+      "n": 500,
+      "tw_violations": 3781,
+      "skipped": 888
+    },
+    "EdgeOff": {
+      "mean_cost": 21.286,
+      "std_cost": 3.3235,
+      "n": 500,
+      "tw_violations": 4572,
+      "skipped": 734
+    },
+    "no_ownership": {
+      "mean_cost": 22.0612,
+      "std_cost": 3.4332,
+      "n": 500,
+      "tw_violations": 4370,
+      "skipped": 565
+    },
+    "no_lookahead": {
+      "mean_cost": 22.029,
+      "std_cost": 3.2991,
+      "n": 500,
+      "tw_violations": 3563,
+      "skipped": 1224
+    }
+  },
+  "Sparse": {
+    "COAST": {
+      "mean_cost": 52.9826,
+      "std_cost": 4.9554,
+      "n": 500,
+      "tw_violations": 9258,
+      "skipped": 8274
+    },
+    "B0": {
+      "mean_cost": 52.9353,
+      "std_cost": 5.1763,
+      "n": 500,
+      "tw_violations": 8595,
+      "skipped": 8519
+    },
+    "B1": {
+      "mean_cost": 53.9385,
+      "std_cost": 5.3956,
+      "n": 500,
+      "tw_violations": 8672,
+      "skipped": 8409
+    },
+    "B3": {
+      "mean_cost": 54.0339,
+      "std_cost": 5.0508,
+      "n": 500,
+      "tw_violations": 9212,
+      "skipped": 8334
+    },
+    "B5": {
+      "mean_cost": 52.9634,
+      "std_cost": 4.9975,
+      "n": 500,
+      "tw_violations": 8430,
+      "skipped": 8559
+    },
+    "EdgeOff": {
+      "mean_cost": 55.476,
+      "std_cost": 5.3405,
+      "n": 500,
+      "tw_violations": 10265,
+      "skipped": 8358
+    },
+    "no_ownership": {
+      "mean_cost": 54.3009,
+      "std_cost": 5.267,
+      "n": 500,
+      "tw_violations": 8866,
+      "skipped": 8377
+    },
+    "no_lookahead": {
+      "mean_cost": 51.8389,
+      "std_cost": 4.8517,
+      "n": 500,
+      "tw_violations": 8453,
+      "skipped": 8451
+    }
+  },
+  "Tight TW": {
+    "COAST": {
+      "mean_cost": 46.1346,
+      "std_cost": 3.1975,
+      "n": 500,
+      "tw_violations": 9234,
+      "skipped": 8256
+    },
+    "B0": {
+      "mean_cost": 47.4148,
+      "std_cost": 3.4702,
+      "n": 500,
+      "tw_violations": 9050,
+      "skipped": 8378
+    },
+    "B1": {
+      "mean_cost": 47.2574,
+      "std_cost": 3.4388,
+      "n": 500,
+      "tw_violations": 9038,
+      "skipped": 8361
+    },
+    "B3": {
+      "mean_cost": 47.0969,
+      "std_cost": 3.5398,
+      "n": 500,
+      "tw_violations": 9171,
+      "skipped": 8365
+    },
+    "B5": {
+      "mean_cost": 47.1804,
+      "std_cost": 3.4579,
+      "n": 500,
+      "tw_violations": 8762,
+      "skipped": 8620
+    },
+    "EdgeOff": {
+      "mean_cost": 48.0013,
+      "std_cost": 3.4219,
+      "n": 500,
+      "tw_violations": 10544,
+      "skipped": 8273
+    },
+    "no_ownership": {
+      "mean_cost": 47.3354,
+      "std_cost": 3.5294,
+      "n": 500,
+      "tw_violations": 9152,
+      "skipped": 8328
+    },
+    "no_lookahead": {
+      "mean_cost": 48.5195,
+      "std_cost": 4.0364,
+      "n": 500,
+      "tw_violations": 8863,
+      "skipped": 8445
+    }
+  }
+}

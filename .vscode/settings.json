@@ -1,4 +1,31 @@
 {
-    "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda"
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda",
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "latexmk (main_AAAI)",
+      "tools": [
+        "latexmk"
+      ]
+    }
+  ],
+  "latex-workshop.linter.chktex.enabled": false,
+  "latex-workshop.latex.autoBuild.run": "onSave",
+  "latex-workshop.latex.autoBuild.saveCache": false,
+  "latex-workshop.latex.rootFile.indicator": "\\\\title\\{COAST:",
+  "latex-workshop.latex.tools": [
+    {
+      "name": "latexmk",
+      "command": "latexmk",
+      "args": [
+        "-synctex=1",
+        "-interaction=nonstopmode",
+        "-file-line-error",
+        "-pdf",
+        "-cd",
+        "-f",
+        "main_AAAI"
+      ]
+    }
+  ]
 }

@@ -257,7 +257,7 @@ def _print_routes(routes, costs, max_instances):
 def _save_json(path, routes, normalized_costs, raw_replay_costs = None,
 		route_diagnostics = None, constraint_diagnostics = None,
 		raw_cost_components = None, normalized_cost_components = None,
-		inference_time = None):
+		inference_time = None, step_diagnostics = None):
 	if raw_replay_costs is None:
 		raw_replay_costs = normalized_costs
 	if route_diagnostics is None:

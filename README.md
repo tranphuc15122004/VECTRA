@@ -71,12 +71,6 @@ VECTRA(
     memory_size=128,
     lookahead_hidden=128,
     dropout=0.1,
-    adaptive_depth=False,
-    adaptive_min_layers=1,
-    adaptive_easy_ratio=0.6,
-    latent_bottleneck=False,
-    latent_tokens=32,
-    latent_min_nodes=64,
     use_edge_features=True,
     use_memory=True,
     use_ownership=True,
@@ -93,9 +87,7 @@ VECTRA(
 `GraphEncoder` trong `layers/Mymodel_layers.py` dùng:
 
 - multi-head self-attention trên các node khách hàng;
-- RBF distance bias từ ma trận khoảng cách Euclidean;
-- tùy chọn `adaptive_depth` để dùng ít layer hơn với instance dễ;
-- tùy chọn `latent_bottleneck` để encode một tập token rút gọn rồi gán representation về toàn bộ node theo nearest token.
+- RBF distance bias từ ma trận khoảng cách Euclidean.
 
 Input node feature:
 
@@ -117,7 +109,7 @@ $$\mathbf{Q}^{(l)} = \mathbf{H}^{(l)} \mathbf{W}_Q^{(l)}, \quad \mathbf{K}^{(l)}
 
 $$\alpha_{ij}^{(l,h)} = \text{softmax}_j \left( \frac{\mathbf{q}_i^{(l,h)} \cdot \mathbf{k}_j^{(l,h)}}{\sqrt{d_k}} + \text{RBF}(d_{ij}) \cdot \mathbf{w}_{\text{edge}}^{(l,h)} \right)$$
 
-$$\hat{\mathbf{h}}_i^{(l)} = \mathbf{h}_i^{(l)} + \mathbf{W}_{\text{out}}^{(l)} \left[ \bigoplus_{h=1}^{H} \sum_j \alpha_{ij}^{(l,h)} \mathbf{v}_j^{(l,h)} \right]$$
+$$\hat{\mathbf{h}}_i^{(l)} = \text{LayerNorm}\left( \mathbf{h}_i^{(l)} + \mathbf{W}_{\text{out}}^{(l)} \left[ \bigoplus_{h=1}^{H} \sum_j \alpha_{ij}^{(l,h)} \mathbf{v}_j^{(l,h)} \right] \right)$$
 
 $$\mathbf{h}_i^{(l+1)} = \text{LayerNorm}\left( \hat{\mathbf{h}}_i^{(l)} + \text{FFN}(\hat{\mathbf{h}}_i^{(l)}) \right), \quad \text{FFN}(\mathbf{z}) = \mathbf{W}_2 \text{ReLU}(\mathbf{W}_1 \mathbf{z})$$
 
@@ -128,16 +120,6 @@ Trong đó $d_{ij} = \|\mathbf{p}_i - \mathbf{p}_j\|_2$ là khoảng cách Eucli
 $$\text{RBF}_k(d) = \exp \left( -\frac{(d - \mu_k)^2}{2\sigma^2} \right), \quad \mu_k \in \left\{0, \tfrac{1}{15}, \dots, 1\right\}, \quad \sigma = \tfrac{1}{15}$$
 
 $$\text{RBF}(d_{ij}) \in \mathbb{R}^{16} \xrightarrow{\text{MLP}} \mathbb{R}^{H}$$
-
-**Adaptive Depth:** số layer thực tế được chọn dựa trên tỉ lệ node visible:
-
-$$L_{\text{used}} = \begin{cases} L_{\text{min}}, & \rho \ge \rho_{\text{easy}} \\ L_{\text{min}} + \lfloor (L - L_{\text{min}}) \cdot \frac{\rho_{\text{easy}} - \rho}{\rho_{\text{easy}}} \rfloor, & \rho < \rho_{\text{easy}} \end{cases}$$
-
-với $\rho = 1 - \frac{|\text{masked nodes}|}{L_c}$, $\rho_{\text{easy}}$ = `adaptive_easy_ratio`.
-
-**Latent Bottleneck:** chọn $T \ll L_c$ token đại diện (bao gồm depot) theo lưới đều, encode qua GraphEncoder, rồi gán representation về toàn bộ node theo nearest neighbor:
-
-$$\mathbf{h}_j = \mathbf{h}_{\text{token}\left(\arg\min_k d_{jk}\right)}^{\text{enc}}$$
 
 **Final Projection:**
 
@@ -222,11 +204,13 @@ $$\mathbf{q}^{(h)} = \tilde{\mathbf{v}} \mathbf{W}_{Q, \text{fuse}}^{(h)}, \quad
 
 $$b_{j}^{(h)} = \mathbf{e}_{j}^{\text{emb}} \cdot \mathbf{w}_{\text{bias}}^{(h)}$$
 
-$$\alpha_j^{(h)} = \text{softmax}_j \left( \frac{\mathbf{q}^{(h)} \cdot \mathbf{k}_j^{(h)}}{\sqrt{d_h}} + b_j^{(h)} \right)$$
+$$u_j^{(h)} = \frac{\mathbf{q}^{(h)} \cdot \mathbf{k}_j^{(h)}}{\sqrt{d_h}} + b_j^{(h)}$$
 
-**Pooling qua các head (mean):**
+**Pooling qua các head (mean của raw logits, không qua softmax):**
 
-$$s_{ij}^{\text{att}} = \frac{1}{H} \sum_{h=1}^{H} \alpha_j^{(h)} \in \mathbb{R}^{1 \times L_c}$$
+$$s_{ij}^{\text{att}} = \frac{1}{H} \sum_{h=1}^{H} u_j^{(h)} \in \mathbb{R}^{1 \times L_c}$$
+
+Lưu ý: `CrossEdgeFusion` trả về trực tiếp mean của pre-softmax logits. Softmax chỉ được áp dụng một lần duy nhất sau cùng trong `_get_logp()` trên score đã fused.
 
 ### 5. Coordination Memory Và Ownership
 
@@ -300,9 +284,9 @@ Với mỗi candidate $j$, lookahead head nhận concatenation của 3 nguồn t
 
 $$\mathbf{f}_{ij} = [\tilde{\mathbf{v}}_i, \mathbf{c}_j, \mathbf{e}_{ij}^{\text{emb}}] \in \mathbb{R}^{3D}$$
 
-$$\ell_{ij} = \mathbf{W}_{\ell 2} \; \text{ReLU}\left( \mathbf{W}_{\ell 1} \mathbf{f}_{ij} \right) \in \mathbb{R}$$
+$$\ell_{ij} = \mathbf{W}_{\ell 2} \; \text{Dropout}\!\left(\text{ReLU}\left( \mathbf{W}_{\ell 1} \mathbf{f}_{ij} \right)\right) \in \mathbb{R}$$
 
-với $\mathbf{W}_{\ell 1} \in \mathbb{R}^{H_\ell \times 3D}$, $\mathbf{W}_{\ell 2} \in \mathbb{R}^{1 \times H_\ell}$, $H_\ell$ = `lookahead_hidden` (mặc định 128).
+với $\mathbf{W}_{\ell 1} \in \mathbb{R}^{H_\ell \times 3D}$ (`LazyLinear`), $\mathbf{W}_{\ell 2} \in \mathbb{R}^{1 \times H_\ell}$, $H_\ell$ = `lookahead_hidden` (mặc định 128). Dropout được áp dụng sau ReLU trong quá trình training.
 
 ### 7. Score Fusion Và Chọn Hành Động
 

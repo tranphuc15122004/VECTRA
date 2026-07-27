@@ -1,0 +1,5 @@
+model,attention_override_rate_pct,fleet_load_std,attention_rank
+COAST,75.2,1.65,14.63
+B0,76.3,1.0,19.5
+no_ownership,53.2,0.99,3.27
+no_lookahead,8.6,1.03,1.14

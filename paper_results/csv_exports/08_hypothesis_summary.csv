@@ -1,0 +1,25 @@
+hypothesis,claim,comparison,regime,base_cost,other_cost,delta_abs,delta_pct,significant_95ci
+H1_Ownership,Ownership reduces conflicts,COAST vs no_ownership,ID_n50m3,44.0193,45.1898,1.1705,2.66,yes
+H1_Ownership,Ownership reduces conflicts,COAST vs no_ownership,Burst_Dynamic,46.9199,47.9837,1.0637,2.27,yes
+H1_Ownership,Ownership reduces conflicts,COAST vs no_ownership,Scale_n100m5,94.5339,97.4803,2.9464,3.12,yes
+H1_Ownership,Ownership reduces conflicts,COAST vs no_ownership,Fleet_n50m6,21.3073,22.0612,0.7539,3.54,yes
+H1_Ownership,Ownership reduces conflicts,COAST vs no_ownership,Sparse_Spatial,52.9826,54.3009,1.3183,2.49,yes
+H1_Ownership,Ownership reduces conflicts,COAST vs no_ownership,Tight_TW,46.1346,47.3354,1.2008,2.60,yes
+H2_Lookahead,Lookahead reduces myopia,COAST vs no_lookahead,ID_n50m3,44.0193,44.7260,0.7067,1.61,yes
+H2_Lookahead,Lookahead reduces myopia,COAST vs no_lookahead,Burst_Dynamic,46.9199,49.4063,2.4864,5.30,yes
+H2_Lookahead,Lookahead reduces myopia,COAST vs no_lookahead,Scale_n100m5,94.5339,96.1412,1.6073,1.70,yes
+H2_Lookahead,Lookahead reduces myopia,COAST vs no_lookahead,Fleet_n50m6,21.3073,22.0290,0.7217,3.39,yes
+H2_Lookahead,Lookahead reduces myopia,COAST vs no_lookahead,Sparse_Spatial,52.9826,51.8389,-1.1436,-2.16,no
+H2_Lookahead,Lookahead reduces myopia,COAST vs no_lookahead,Tight_TW,46.1346,48.5195,2.3850,5.17,yes
+H3_Edge,Edge improves feasibility,COAST vs EdgeOff,ID_n50m3,44.0193,45.8833,1.8640,4.23,yes
+H3_Edge,Edge improves feasibility,COAST vs EdgeOff,Burst_Dynamic,46.9199,48.6739,1.7539,3.74,yes
+H3_Edge,Edge improves feasibility,COAST vs EdgeOff,Scale_n100m5,94.5339,97.7233,3.1894,3.37,yes
+H3_Edge,Edge improves feasibility,COAST vs EdgeOff,Fleet_n50m6,21.3073,21.2860,-0.0212,-0.10,no
+H3_Edge,Edge improves feasibility,COAST vs EdgeOff,Sparse_Spatial,52.9826,55.4760,2.4935,4.71,yes
+H3_Edge,Edge improves feasibility,COAST vs EdgeOff,Tight_TW,46.1346,48.0013,1.8667,4.05,yes
+H4_MLP,MLP generalizes better,COAST vs B5_linear,ID_n50m3,44.0193,45.4652,1.4460,3.28,yes
+H4_MLP,MLP generalizes better,COAST vs B5_linear,Burst_Dynamic,46.9199,48.3732,1.4532,3.10,yes
+H4_MLP,MLP generalizes better,COAST vs B5_linear,Scale_n100m5,94.5339,100.2062,5.6723,6.00,yes
+H4_MLP,MLP generalizes better,COAST vs B5_linear,Fleet_n50m6,21.3073,20.9692,-0.3381,-1.59,no
+H4_MLP,MLP generalizes better,COAST vs B5_linear,Sparse_Spatial,52.9826,52.9634,-0.0191,-0.04,no
+H4_MLP,MLP generalizes better,COAST vs B5_linear,Tight_TW,46.1346,47.1804,1.0458,2.27,yes
