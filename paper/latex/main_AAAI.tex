@@ -1,64 +1,50 @@
 % !TEX root = main_AAAI.tex
-\documentclass[conference]{IEEEtran}
-\IEEEoverridecommandlockouts
-% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
-\usepackage{algorithm}
-\usepackage{algpseudocode}
-\usepackage{cite}
-\usepackage{amsmath,amssymb,amsfonts}
-%\usepackage{multirow}
+\documentclass[letterpaper]{article}
+\usepackage[submission]{aaai2027}
+\usepackage[hyphens]{url}
 \usepackage{graphicx}
-\usepackage{textcomp}
-\usepackage{xcolor}
-\usepackage{color,soul}
-\usepackage{float}
+\urlstyle{rm}
+\def\UrlFont{\rm}
+\usepackage{natbib}
+\usepackage{caption}
+\frenchspacing
+
+\usepackage{amsmath,amssymb}
 \usepackage{booktabs}
-\usepackage{multirow}
-\usepackage{subcaption}
-\usepackage[acronym]{glossaries}
-\usepackage{url} 
-\usepackage[hidelinks]{hyperref}
-\makeglossaries
-%===========----------------------Glossaries----------------------===========
-\loadglsentries{GL}
-\renewcommand{\sectionautorefname}{Section}
-\renewcommand{\subsectionautorefname}{Section}
-\renewcommand{\tableautorefname}{Table}
-\renewcommand{\figureautorefname}{Figure}
-\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\pdfinfo{
+/TemplateVersion (2027.1)
+}
+\setcounter{secnumdepth}{2}
 \begin{document}
-\title{COAST: Coordinated Ownership and Anticipatory Sequential rouTing for Dynamic Vehicle Routing with Time Windows}
+\title{COAST: Coordinated Ownership and Anticipatory Sequential Routing for Dynamic Vehicle Routing with Time Windows}
+\author{Anonymous Submission}
+\affiliations{}
 
 	
 \maketitle
 
 \begin{abstract}
 %Dynamic Vehicle Routing Problems with Time Windows (DVRPTW) require sequential policies to simultaneously coordinate fleet-wide decisions and anticipate long-term routing consequences under uncertainty. Existing shared policies often entangle these two aspects within a single scoring mechanism, leading to suboptimal decisions and limited generalization. We propose COAST, a neural routing framework that explicitly decomposes customer selection into two signals: a coordination-driven ownership bias derived from per-vehicle memory, and a candidate-conditioned lookahead estimate of future cost. These signals are integrated through an edge-aware scoring function that captures dynamic feasibility. Experiments on DVRPTW benchmarks show that COAST outperforms classical heuristics and recent neural baselines. Ablation studies demonstrate that coordination and anticipation provide complementary benefits, while out-of-distribution evaluations confirm improved generalization across varying arrival rates, time-window constraints, and fleet sizes. Our results highlight the importance of explicitly separating coordination and anticipation in sequential routing policies for dynamic environments.
-Dynamic Vehicle Routing Problems with Time Windows (DVRPTW) require sequential routing policies to make decisions that are simultaneously feasible in the short term, coordinated across multiple vehicles, and effective over long planning horizons under dynamic customer arrivals. Existing neural routing policies typically compress these heterogeneous objectives into a single compatibility score, making coordination and anticipation difficult to learn jointly. We propose COAST (Coordinated Ownership and Anticipatory Sequential rouTing), a neural routing framework that reformulates customer selection as a decision decomposition problem. Specifically, COAST estimates three complementary decision signals: Edge-aware Compatibility for immediate routing feasibility, Ownership Memory for implicit fleet coordination, and Candidate-conditioned Lookahead for anticipatory decision making. These signals are adaptively fused to produce the final routing policy and are optimized end-to-end through reinforcement learning without auxiliary supervision. Extensive experiments on standard DVRPTW benchmarks demonstrate that COAST consistently outperforms both classical heuristics and recent neural routing methods. Ablation studies confirm that the three decision signals provide complementary contributions, while out-of-distribution evaluations show substantially improved generalization across varying customer arrival rates, time-window tightness, and fleet sizes. These results suggest that explicitly decomposing routing decisions into complementary reasoning components provides a more effective and generalizable framework for dynamic vehicle routing.
+Dynamic Vehicle Routing Problems with Time Windows (DVRPTW) require sequential routing policies to make decisions that are simultaneously feasible in the short term, coordinated across multiple vehicles, and effective over long planning horizons under dynamic customer arrivals. Existing neural routing policies typically compress these heterogeneous objectives into a single compatibility score, making coordination and anticipation difficult to learn jointly. We propose COAST (Coordinated Ownership and Anticipatory Sequential Routing), a neural routing framework that reformulates customer selection as a decision decomposition problem. Specifically, COAST estimates three complementary decision signals: Edge-aware Compatibility for immediate routing feasibility, Ownership Memory for implicit fleet coordination, and Candidate-conditioned Lookahead for anticipatory decision making. These signals are adaptively fused to produce the final routing policy and are optimized end-to-end through reinforcement learning without auxiliary supervision. Extensive experiments on standard DVRPTW benchmarks demonstrate that COAST consistently outperforms both classical heuristics and recent neural routing methods. Ablation studies confirm that the three decision signals provide complementary contributions, while out-of-distribution evaluations show substantially improved generalization across varying customer arrival rates, time-window tightness, and fleet sizes. These results suggest that explicitly decomposing routing decisions into complementary reasoning components provides a more effective and generalizable framework for dynamic vehicle routing.
 \end{abstract}
-
-\begin{IEEEkeywords}
- Dynamic Vehicle Routing, Multi-Agent Reinforcement Learning, Structured Decision Decomposition, Coordination Memory, Anticipatory Planning
-\end{IEEEkeywords}
-
 
 \section{Introduction}\label{sec:intro}
 
-The \gls{vrp} is one of the most extensively studied combinatorial optimization problems, with broad applications in logistics, transportation, and last-mile delivery. Classical VRP formulations assume that all customer requests and travel information are available before optimization begins \cite{toth2014vehicle}. However, many real-world logistics systems operate in highly dynamic environments, where customer requests arrive continuously during execution, traffic conditions evolve over time, and routing decisions must be updated online. These practical requirements give rise to the \gls{dvrp}, which more accurately models applications such as on-demand delivery, ride-sharing, and urban logistics \cite{psaraftis1988dynamic}.
+The Vehicle Routing Problem (VRP) is one of the most extensively studied combinatorial optimization problems, with broad applications in logistics, transportation, and last-mile delivery. Classical VRP formulations assume that all customer requests and travel information are available before optimization begins \cite{toth2014vehicle}. However, many real-world logistics systems operate in highly dynamic environments, where customer requests arrive continuously during execution, traffic conditions evolve over time, and routing decisions must be updated online. These practical requirements give rise to the Dynamic Vehicle Routing Problem (DVRP), which more accurately models applications such as on-demand delivery, ride-sharing, and urban logistics \cite{psaraftis1988dynamic}.
 
-Among its variants, the \gls{dvrptw} is particularly challenging because each request is associated with temporal and capacity constraints while future customer arrivals remain unknown. Unlike static routing, where globally optimized routes can be computed offline, a routing policy must repeatedly select the next customer for each vehicle under incomplete information. Decisions that appear locally optimal may adversely affect future routing opportunities, making effective online planning essential.
+Among its variants, the Dynamic Vehicle Routing Problem with Time Windows (DVRPTW) is particularly challenging because each request is associated with temporal and capacity constraints while future customer arrivals remain unknown. Unlike static routing, where globally optimized routes can be computed offline, a routing policy must repeatedly select the next customer for each vehicle under incomplete information. Decisions that appear locally optimal may adversely affect future routing opportunities, making effective online planning essential.
 
-Traditional approaches to \gls{dvrptw} primarily rely on dispatching rules, metaheuristics with periodic re-optimization, or rolling-horizon optimization frameworks. Although these methods have demonstrated competitive performance in many settings, they often require extensive problem-specific engineering and repeated optimization during execution, making them difficult to generalize across different dynamic environments. Recently, deep reinforcement learning (DRL) has emerged as a promising alternative by learning routing policies directly from data, enabling real-time decision making without solving a new optimization problem whenever the environment changes.
+Traditional approaches to DVRPTW primarily rely on dispatching rules, metaheuristics with periodic re-optimization, or rolling-horizon optimization frameworks. Although these methods have demonstrated competitive performance in many settings, they often require extensive problem-specific engineering and repeated optimization during execution, making them difficult to generalize across different dynamic environments. Recently, deep reinforcement learning (DRL) has emerged as a promising alternative by learning routing policies directly from data, enabling real-time decision making without solving a new optimization problem whenever the environment changes.
 
 Despite this progress, learning-based routing policies still struggle to simultaneously coordinate multiple vehicles and anticipate the long-term consequences of online decisions. Existing sequential routing policies typically employ a shared neural policy to make decisions for all vehicles. While this formulation naturally enables parameter sharing and implicit coordination, it also requires the policy to balance fleet-level coordination and long-term planning within a single decision process. As a result, the learned policy may become less robust when customer arrival patterns, spatial distributions, or time-window characteristics differ from those observed during training.
 
-In this paper, we argue that coordination and long-term planning represent two fundamentally different reasoning processes and should be modeled explicitly rather than implicitly. Motivated by this observation, we propose \gls{coast}, a reinforcement learning framework that separates customer selection into complementary decision signals. COAST combines an edge-aware compatibility module for modeling local vehicle--customer interactions, a memory-based ownership mechanism for implicit fleet coordination, and a candidate-conditioned lookahead estimator for evaluating the downstream consequences of individual routing decisions. These complementary signals are adaptively fused into a unified routing policy that is trained end-to-end using reinforcement learning.
+In this paper, we argue that coordination and long-term planning represent two fundamentally different reasoning processes and should be modeled explicitly rather than implicitly. Motivated by this observation, we propose COAST, a reinforcement learning framework that separates customer selection into complementary decision signals. COAST combines an edge-aware compatibility module for modeling local vehicle--customer interactions, a memory-based ownership mechanism for implicit fleet coordination, and a candidate-conditioned lookahead estimator for evaluating the downstream consequences of individual routing decisions. These complementary signals are adaptively fused into a unified routing policy that is trained end-to-end using reinforcement learning.
 
 The main contributions of this paper are summarized as follows:
 
 \begin{itemize}
-    \item We present a structured decision decomposition framework for \gls{dvrptw} that explicitly separates fleet coordination from long-term planning within sequential routing policies.
+    \item We present a structured decision decomposition framework for DVRPTW that explicitly separates fleet coordination from long-term planning within sequential routing policies.
     \item We introduce a memory-based ownership mechanism that enables implicit vehicle coordination without explicit inter-vehicle communication.
     \item We propose a candidate-conditioned lookahead module that estimates the long-term routing impact of each feasible action at the decision level.
     \item Extensive experiments demonstrate that the proposed framework consistently outperforms classical heuristics, hyper-heuristics, and recent neural routing approaches while exhibiting improved generalization across diverse dynamic environments.
@@ -71,9 +57,9 @@ The remainder of this paper is organized as follows. Section~\ref{sec:related} r
 \section{Related Work}
 \label{sec:related}
 
-\gls{drl} has emerged as a competitive paradigm for neural combinatorial optimization in \gls{vrp}s \cite{nazari2018reinforcement}. Early studies employed recurrent encoder--decoder architectures trained with policy gradients to learn routing heuristics directly from data \cite{nazari2018reinforcement}. Subsequently, attention-based models replaced recurrent networks with Transformer architectures, substantially improving representation learning and solution quality across a wide range of VRP variants \cite{kool2018attention}. More recent research has focused on enhancing the scalability, generalization, and expressive power of neural routing policies. Representative advances include transferable local policies for improving cross-scale generalization \cite{gao2023towards}, heterogeneous attention mechanisms for richer feature extraction \cite{wang2024deep}, lightweight cross-attention architectures for large-scale routing \cite{luo2025boosting}, and edge-aware Transformers that explicitly exploit pairwise customer relationships \cite{meng2025eformer}. These methods have significantly strengthened neural routing performance by improving representation learning and attention mechanisms. Nevertheless, routing decisions are still typically generated through a single compatibility function between vehicle and customer representations, implicitly coupling local feasibility, fleet coordination, and long-term routing considerations into a single decision score.
+Deep Reinforcement Learning (DRL) has emerged as a competitive paradigm for neural combinatorial optimization in VRPs \cite{nazari2018reinforcement}. Early studies employed recurrent encoder--decoder architectures trained with policy gradients to learn routing heuristics directly from data \cite{nazari2018reinforcement}. Subsequently, attention-based models replaced recurrent networks with Transformer architectures, substantially improving representation learning and solution quality across a wide range of VRP variants \cite{kool2018attention}. More recent research has focused on enhancing the scalability, generalization, and expressive power of neural routing policies. Representative advances include transferable local policies for improving cross-scale generalization \cite{gao2023towards}, heterogeneous attention mechanisms for richer feature extraction \cite{wang2024deep}, lightweight cross-attention architectures for large-scale routing \cite{luo2025boosting}, and edge-aware Transformers that explicitly exploit pairwise customer relationships \cite{meng2025eformer}. These methods have significantly strengthened neural routing performance by improving representation learning and attention mechanisms. Nevertheless, routing decisions are still typically generated through a single compatibility function between vehicle and customer representations, implicitly coupling local feasibility, fleet coordination, and long-term routing considerations into a single decision score.
 
-For \gls{dvrp}, reinforcement learning has become an attractive alternative to repeatedly solving optimization models online. Existing studies formulate DVRPs as Markov decision processes and learn dispatching policies using value-based or actor--critic reinforcement learning \cite{akkerman2025comparison,konovalenko2024optimizing}. Recent work has further investigated richer state representations, graph neural networks, and Transformer-based architectures to better capture dynamic customer arrivals and evolving routing states \cite{konovalenko2024optimizing,li2024cada,meng2025eformer}. Although these advances improve policy quality and generalization, routing decisions are still primarily driven by a unified compatibility score, making it difficult to explicitly distinguish immediate feasibility from the long-term consequences of selecting a particular customer.
+For DVRP, reinforcement learning has become an attractive alternative to repeatedly solving optimization models online. Existing studies formulate DVRPs as Markov decision processes and learn dispatching policies using value-based or actor--critic reinforcement learning \cite{akkerman2025comparison,konovalenko2024optimizing}. Recent work has further investigated richer state representations, graph neural networks, and Transformer-based architectures to better capture dynamic customer arrivals and evolving routing states \cite{konovalenko2024optimizing,li2024cada,meng2025eformer}. Although these advances improve policy quality and generalization, routing decisions are still primarily driven by a unified compatibility score, making it difficult to explicitly distinguish immediate feasibility from the long-term consequences of selecting a particular customer.
 
 Another fundamental challenge is coordinating multiple vehicles in dynamic environments. Existing approaches typically rely on centralized training, explicit inter-vehicle communication, or multi-agent reinforcement learning to coordinate vehicle behaviors \cite{zhang2020multi,shahbazian2025knowledge,xia2025multi}. While these strategies improve cooperation, they generally require repeatedly modeling the entire fleet during decision making, leading to increased computational complexity and reduced scalability. Furthermore, most actor--critic methods estimate only a state-value function for variance reduction. Since the critic is independent of the selected action, it provides identical guidance for all candidate customers within the same state, limiting its ability to evaluate the downstream routing impact of individual actions and making learned policies more susceptible to myopic decisions.
 
@@ -190,13 +176,13 @@ where $N_{skip}$ denotes the number of revealed but unserved customers.
 
 The cumulative return is
 \[
+\begin{aligned}
 R
-=
-\sum_{t=0}^{T-1}r_t+r_T^{skip}
-=
--\sum_t d_{\iota_t,a_t}
--\lambda_{late}\sum_t\ell_{\iota_t,a_t}
--\lambda_{skip}N_{skip}.
+&= \sum_{t=0}^{T-1}r_t+r_T^{skip} \\
+&= -\sum_t d_{\iota_t,a_t}
+   -\lambda_{late}\sum_t\ell_{\iota_t,a_t}
+   -\lambda_{skip}N_{skip}.
+\end{aligned}
 \]
 
 The training objective is
@@ -340,9 +326,11 @@ o_{ik} = \frac{(\mathbf{W}_{veh}\,\mathbf{m}_i^{(t)}) \cdot (\mathbf{W}_{cust}\,
 \]
 and the coordination bias for vehicle $k_t$ is the log-relative ownership over the fleet:
 \[
+\begin{aligned}
 S^{owner}_j
-= \log\!\left(\frac{\exp(o_{k_t,j})}{\sum_{i'=1}^{L_v}\exp(o_{i',j})}\right),
-\quad S^{owner} \in \mathbb{R}^{N \times 1 \times L_c}.
+&= \log\!\left(\frac{\exp(o_{k_t,j})}{\sum_{i'=1}^{L_v}\exp(o_{i',j})}\right), \\
+S^{owner} &\in \mathbb{R}^{N \times 1 \times L_c}.
+\end{aligned}
 \]
 Using log-probability ensures the ownership signal is well-scaled relative to the other scores, and the softmax across vehicles encodes \textit{relative} claim --- a high $S^{owner}_j$ means vehicle $k_t$ is the strongest claimant among all vehicles.
 Neither the OwnershipHead nor the memory update imposes any auxiliary supervised loss; both are shaped entirely by the policy gradient, allowing coordination semantics to emerge from optimizing routing performance.
@@ -429,12 +417,11 @@ The LookaheadHead differs from standard value-based approaches in that it produc
 By training entirely through the policy gradient, the lookahead signal is free to encode whatever combination of vehicle state, candidate embedding, and edge interaction best reduces myopic decisions --- including routing consequences that are difficult to formalize analytically.
 Its separation from the critic baseline preserves the action-independence required for an unbiased gradient estimator while allowing the per-candidate signal to carry independent predictive content.
 
-\begin{table}[t]
+\begin{table*}[t!]
 \centering
-\caption{Summary of main notations used in Section~\ref{sec:method}.}
-\label{tab:notation}
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{ll}
+{\small
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{p{0.57\textwidth}p{0.39\textwidth}}
 \toprule
 \textbf{Symbol} & \textbf{Description} \\
 \midrule
@@ -489,8 +476,11 @@ $b_\phi(s_t) \in \mathbb{R}$     & Learned critic baseline (distinct from Lookah
 $A_t = R_t - b_\phi(s_t)$        & Advantage estimate \\
 $\alpha,\,\beta$                 & Critic weight and entropy coefficient \\
 \bottomrule
-\end{tabular}}
-\end{table}
+\end{tabular}
+}
+\caption{Summary of main notation used in Section~\ref{sec:method}.}
+\label{tab:notation}
+\end{table*}
 
 \section{Experimental results} \label{sec:experiment}
 
@@ -528,34 +518,34 @@ The second group consists of five synthetically generated datasets at increasing
 We compare COAST against several established methods. \textbf{MARDAM} is a multi-head attention-based routing policy that serves as a direct neural baseline with comparable capacity. \textbf{Attention Model (AM)} \cite{kool2018attention} and \textbf{PolyNet} \cite{hottung2025polynet} are Transformer-based routing architectures originally developed for static VRP, adapted here for the dynamic setting. We additionally include classical hyper-heuristic baselines: \textbf{GPHH} (genetic programming hyper-heuristic) \cite{TAM2026114234}, \textbf{C+C} (Clark-Wright savings with competence), \textbf{C+W} (Clark-Wright with waiting), and \textbf{WIQ+C} (work-in-queue plus competence). All neural baselines use the same training data distribution.
 
 \paragraph{Training configuration}
-Model-specific architectural settings and parameter counts are summarized in \autoref{tab:model_config}. The key point for interpretation is that COAST and all internal ablations share the same backbone, so the ablation study isolates the contribution of the proposed modules rather than capacity differences. By contrast, MARDAM, AM, and PolyNet should be viewed as external neural baselines with comparable or stronger capacity, making improvements over them conservative rather than attributable to an oversized backbone.
+Model-specific architectural settings and parameter counts are summarized in Table~\ref{tab:model_config}. The key point for interpretation is that COAST and all internal ablations share the same backbone, so the ablation study isolates the contribution of the proposed modules rather than capacity differences. By contrast, MARDAM, AM, and PolyNet should be viewed as external neural baselines with comparable or stronger capacity, making improvements over them conservative rather than attributable to an oversized backbone.
 
 Training uses 500 epochs (1,000 iterations each) with a batch size of 512, so the number of training instances is 512,000. The learning rate is $10^{-4}$ via the Adam optimizer. The policy gradient objective employs a learned critic baseline with advantage normalization and entropy regularization ($\beta = 0.01$). All models are trained on DVRPTW instances with 50 customers and 3 vehicles; time windows are drawn uniformly from $[30, 91]$, demands from $[5, 41]$, and the degree of dynamism is sampled uniformly from $\{0.10, 0.25, 0.50, 0.75\}$ per instance, exposing all policies to low-, medium-, and high-dynamism regimes during training rather than tuning them to a single operating point.
 
 \begin{table}[t]
 \centering
-\caption{Neural model configurations used in the experiments. The first row lists COAST and its internal ablations, which share the same backbone architecture. The subsequent rows list external neural baselines with comparable or stronger capacity.}
-\label{tab:model_config}
-\scriptsize
-\resizebox{\linewidth}{!}{
-\begin{tabular}{lcccccl}
+{\small
+\setlength{\tabcolsep}{1.5pt}
+\begin{tabular}{lccccc}
 \toprule
 Model & Layers & Heads & FF & Dim & Params \\
 \midrule
-COAST + internal ablations & 2 & 4 & 256 & 128 & 0.649M  \\
+\shortstack[l]{COAST + internal\\ablations} & 2 & 4 & 256 & 128 & 0.649M  \\
 MARDAM & 3 & 8 & 512 & 128 & 0.727M  \\
 AM & 5 & 8 & 256 & 128 & 0.794M  \\
 PolyNet & 5 & 8 & 256 & 128 & 0.830M  \\
 \bottomrule
-\end{tabular}}
-\vspace{1mm}
+\end{tabular}
+}
+\caption{Neural model configurations used in the experiments. The first row lists COAST and its internal ablations, which share the same backbone architecture. The subsequent rows list external neural baselines with comparable or stronger capacity.}
+\label{tab:model_config}
 \end{table}
 
 
 
 \subsection{Main results on Solomon-style datasets}
 
-\autoref{tab:solomon_benchmark} reports the Solomon-style benchmark results grouped by instance size and topology. Instead of using only size-level averages, we separately report Random (R), Cluster (C), and mixed Random-Cluster (RC) instances because these topologies impose different routing challenges. Random instances emphasize global assignment and long-range coordination, Cluster instances favor compact intra-cluster routing, while RC instances require both local exploitation and global coordination.
+Table~\ref{tab:solomon_benchmark} reports the Solomon-style benchmark results grouped by instance size and topology. Instead of using only size-level averages, we separately report Random (R), Cluster (C), and mixed Random-Cluster (RC) instances because these topologies impose different routing challenges. Random instances emphasize global assignment and long-range coordination, Cluster instances favor compact intra-cluster routing, while RC instances require both local exploitation and global coordination.
 
 At the smallest scale, \texttt{h100}, COAST(g) achieves the best mean cost on the Random and RC subsets, with costs of 51.33 and 65.69, respectively. The only exception is the Cluster subset, where MARDAM(g) slightly outperforms COAST(g), obtaining 65.08 compared with 67.65. This suggests that, for small and spatially concentrated instances, the benefit of the proposed decomposition is less pronounced because the routing structure is already relatively compact. Nevertheless, after aggregating all \texttt{h100} topologies, COAST(g) still achieves the best overall mean cost of 60.39.
 
@@ -563,24 +553,23 @@ As the instance size increases, the advantage of COAST becomes more consistent. 
 
 The topology-level results further show that the gains are not concentrated in a single spatial regime. At \texttt{h200}, MARDAM(g) is 37.4\%, 38.1\%, and 36.4\% higher than COAST(g) on the Random, Cluster, and RC groups, respectively, when measured relative to COAST(g). At \texttt{h400}, these gaps increase to 52.5\%, 46.8\%, and 58.8\%. The largest gap appears on the \texttt{h400}-RC subset, suggesting that COAST is particularly effective when both clustered local structure and dispersed global structure must be handled simultaneously.
 
-The instance-level comparison in \autoref{tab:solomon_win_counts} confirms that the aggregate improvements are not caused by a small number of outlier instances. Across all 176 Solomon-style instances, COAST(g) outperforms MARDAM(g) on 157 instances, AM(g) on 166 instances, PolyNet(g) on 161 instances, and GPHH on 172 instances. COAST(g) also wins against C+C, C+W, and WIQ+C on all evaluated instances. The win rates become especially strong at larger scales: on both \texttt{h200} and \texttt{h400}, COAST(g) wins against MARDAM(g) on 100.0\% of the instances.
+The instance-level comparison in Table~\ref{tab:solomon_win_counts} confirms that the aggregate improvements are not caused by a small number of outlier instances. Across all 176 Solomon-style instances, COAST(g) outperforms MARDAM(g) on 157 instances, AM(g) on 166 instances, PolyNet(g) on 161 instances, and GPHH on 172 instances. COAST(g) also wins against C+C, C+W, and WIQ+C on all evaluated instances. The win rates become especially strong at larger scales: on both \texttt{h200} and \texttt{h400}, COAST(g) wins against MARDAM(g) on 100.0\% of the instances.
 
-\autoref{tab:solomon_improvement} reports the average percentage improvement of COAST(g) over each baseline. Over all instances, COAST(g) improves upon MARDAM(g), AM(g), PolyNet(g), and GPHH by 22.4\%, 13.8\%, 13.9\%, and 33.3\%, respectively. The improvement over MARDAM(g) increases from 2.0\% on \texttt{h100} to 28.6\% on \texttt{h200} and 35.3\% on \texttt{h400}, further supporting the scalability of COAST. Similar trends are observed against the classical and handcrafted baselines, where the improvements exceed 60\% on average for C+C, C+W, and WIQ+C.
+Table~\ref{tab:solomon_improvement} reports the average percentage improvement of COAST(g) over each baseline. Over all instances, COAST(g) improves upon MARDAM(g), AM(g), PolyNet(g), and GPHH by 22.4\%, 13.8\%, 13.9\%, and 33.3\%, respectively. The improvement over MARDAM(g) increases from 2.0\% on \texttt{h100} to 28.6\% on \texttt{h200} and 35.3\% on \texttt{h400}, further supporting the scalability of COAST. Similar trends are observed against the classical and handcrafted baselines, where the improvements exceed 60\% on average for C+C, C+W, and WIQ+C.
 
-Comparing decoding strategies in \autoref{tab:solomon_benchmark}, COAST achieves strong results with both sampling and greedy decoding. The difference between COAST(s) and COAST(g) is generally small, and greedy decoding is often competitive or better in the aggregate rows. This indicates that COAST does not rely heavily on stochastic sampling to obtain high-quality solutions, which is desirable for efficient inference.
+Comparing decoding strategies in Table~\ref{tab:solomon_benchmark}, COAST achieves strong results with both sampling and greedy decoding. The difference between COAST(s) and COAST(g) is generally small, and greedy decoding is often competitive or better in the aggregate rows. This indicates that COAST does not rely heavily on stochastic sampling to obtain high-quality solutions, which is desirable for efficient inference.
 
-Overall, the results in \autoref{tab:solomon_benchmark}, \autoref{tab:solomon_win_counts}, and \autoref{tab:solomon_improvement} show that COAST is competitive at small scale and becomes increasingly advantageous on larger Solomon-style instances. Except for the \texttt{h100} Cluster subset, COAST consistently delivers the best greedy performance across topology groups. The high instance-level win rates and substantial percentage improvements further demonstrate that the proposed method provides robust and scalable gains across different spatial distributions.
+Overall, the results in Tables~\ref{tab:solomon_benchmark}, \ref{tab:solomon_win_counts}, and \ref{tab:solomon_improvement} show that COAST is competitive at small scale and becomes increasingly advantageous on larger Solomon-style instances. Except for the \texttt{h100} Cluster subset, COAST consistently delivers the best greedy performance across topology groups. The high instance-level win rates and substantial percentage improvements further demonstrate that the proposed method provides robust and scalable gains across different spatial distributions.
 
 
 \begin{table*}[t]
 \centering
-\caption{Solomon-style benchmark results grouped by dataset size and topology. Values are mean normalized costs over the evaluated scenarios in each row. The \texttt{All} row aggregates all topologies within the same dataset size, and the final row aggregates all 176 Solomon-style instances.}
-\label{tab:solomon_benchmark}
-\scriptsize
-\resizebox{\textwidth}{!}{
+{\small
+\setlength{\tabcolsep}{1.5pt}
 \begin{tabular}{llrrrrrrrrrrrr}
 \toprule
-Dataset & Topology & COAST(s) & COAST(g) & MARDAM(s) & MARDAM(g) & AM(g) & AM(s) & PolyNet(g) & PolyNet(s) & GPHH & C+C & C+W & WIQ+C \\
+& & \multicolumn{2}{c}{COAST} & \multicolumn{2}{c}{MARDAM} & \multicolumn{2}{c}{AM} & \multicolumn{2}{c}{PolyNet} & & & & \\
+Dataset & Topology & s & g & s & g & g & s & g & s & GPHH & C+C & C+W & WIQ+C \\
 \midrule
 \texttt{h100} & Random & 52.73 & \textbf{51.33} & 56.53 & 54.89 & 61.22 & 60.28 & 59.57 & 98.89 & 66.39 & 144.02 & 144.40 & 178.61 \\
 \texttt{h100} & Cluster & 66.68 & 67.65 & 66.11 & \textbf{65.08} & 73.01 & 72.56 & 70.36 & 100.38 & 80.63 & 130.71 & 118.12 & 175.02 \\
@@ -599,7 +588,10 @@ Dataset & Topology & COAST(s) & COAST(g) & MARDAM(s) & MARDAM(g) & AM(g) & AM(s)
 \midrule
 All & All & 129.75 & \textbf{127.25} & 185.23 & 178.74 & 147.94 & 148.61 & 148.73 & 219.42 & 210.74 & 352.29 & 344.05 & 426.27 \\
 \bottomrule
-\end{tabular}}
+\end{tabular}
+}
+\caption{Solomon-style benchmark results grouped by dataset size and topology. Values are mean normalized costs over the evaluated scenarios in each row. The \texttt{All} row aggregates all topologies within the same dataset size, and the final row aggregates all 176 Solomon-style instances.}
+\label{tab:solomon_benchmark}
 \end{table*}
 
 
@@ -613,30 +605,28 @@ All & All & 129.75 & \textbf{127.25} & 185.23 & 178.74 & 147.94 & 148.61 & 148.7
 
 \begin{table*}[t]
 \centering
-\caption{Instance-level win counts and win rates of COAST(g) on the Solomon-style benchmark. Each entry has the format wins/instances (win rate), where a win indicates that COAST(g) obtains a lower normalized cost than the corresponding baseline.}
-\label{tab:solomon_win_counts}
-\scriptsize
-\resizebox{\textwidth}{!}{
+{\small
+\setlength{\tabcolsep}{1.5pt}
 \begin{tabular}{lrrrrrrr}
 \toprule
 Dataset & MARDAM(g) & AM(g) & PolyNet(g) & GPHH & C+C & C+W & WIQ+C \\
 \midrule
-\texttt{h100} & 37/56 (66.1\%) & 48/56 (85.7\%) & 43/56 (76.8\%) & 53/56 (94.6\%) & 56/56 (100.0\%) & 56/56 (100.0\%) & 56/56 (100.0\%) \\
-\texttt{h200} & 60/60 (100.0\%) & 58/60 (96.7\%) & 59/60 (98.3\%) & 59/60 (98.3\%) & 60/60 (100.0\%) & 60/60 (100.0\%) & 60/60 (100.0\%) \\
-\texttt{h400} & 60/60 (100.0\%) & 60/60 (100.0\%) & 59/60 (98.3\%) & 60/60 (100.0\%) & 60/60 (100.0\%) & 60/60 (100.0\%) & 60/60 (100.0\%) \\
-All & 157/176 (89.2\%) & 166/176 (94.3\%) & 161/176 (91.5\%) & 172/176 (97.7\%) & 176/176 (100.0\%) & 176/176 (100.0\%) & 176/176 (100.0\%) \\
+\texttt{h100} & \shortstack{37/56\\(66.1\%)} & \shortstack{48/56\\(85.7\%)} & \shortstack{43/56\\(76.8\%)} & \shortstack{53/56\\(94.6\%)} & \shortstack{56/56\\(100.0\%)} & \shortstack{56/56\\(100.0\%)} & \shortstack{56/56\\(100.0\%)} \\
+\texttt{h200} & \shortstack{60/60\\(100.0\%)} & \shortstack{58/60\\(96.7\%)} & \shortstack{59/60\\(98.3\%)} & \shortstack{59/60\\(98.3\%)} & \shortstack{60/60\\(100.0\%)} & \shortstack{60/60\\(100.0\%)} & \shortstack{60/60\\(100.0\%)} \\
+\texttt{h400} & \shortstack{60/60\\(100.0\%)} & \shortstack{60/60\\(100.0\%)} & \shortstack{59/60\\(98.3\%)} & \shortstack{60/60\\(100.0\%)} & \shortstack{60/60\\(100.0\%)} & \shortstack{60/60\\(100.0\%)} & \shortstack{60/60\\(100.0\%)} \\
+All & \shortstack{157/176\\(89.2\%)} & \shortstack{166/176\\(94.3\%)} & \shortstack{161/176\\(91.5\%)} & \shortstack{172/176\\(97.7\%)} & \shortstack{176/176\\(100.0\%)} & \shortstack{176/176\\(100.0\%)} & \shortstack{176/176\\(100.0\%)} \\
 \bottomrule
-\end{tabular}}
+\end{tabular}
+}
+\caption{Instance-level win counts and win rates of COAST(g) on the Solomon-style benchmark. Each entry has the format wins/instances (win rate), where a win indicates that COAST(g) obtains a lower normalized cost than the corresponding baseline.}
+\label{tab:solomon_win_counts}
 \end{table*}
 
 
-\begin{table}[t]
+\begin{table*}[t]
 \centering
-\caption{Average percentage improvement of COAST(g) over each baseline on the Solomon-style benchmark. Values are computed per instance as $(\mathrm{baseline}-\mathrm{COAST})/\mathrm{baseline}\times 100$ and then averaged within each group.}
-\label{tab:solomon_improvement}
-\scriptsize
-\setlength{\tabcolsep}{3.2pt}
-\resizebox{\columnwidth}{!}{
+{\small
+\setlength{\tabcolsep}{2pt}
 \begin{tabular}{lrrrrrrr}
 \toprule
 Dataset & MARDAM(g) & AM(g) & PolyNet(g) & GPHH & C+C & C+W & WIQ+C \\
@@ -646,13 +636,16 @@ Dataset & MARDAM(g) & AM(g) & PolyNet(g) & GPHH & C+C & C+W & WIQ+C \\
 \texttt{h400} & 35.3 & 16.3 & 16.2 & 40.6 & 67.4 & 66.9 & 71.7 \\
 All & 22.4 & 13.8 & 13.9 & 33.3 & 61.9 & 60.0 & 69.1 \\
 \bottomrule
-\end{tabular}}
-\end{table}
+\end{tabular}
+}
+\caption{Average percentage improvement of COAST(g) over each baseline on the Solomon-style benchmark. Values are computed per instance as $(\mathrm{baseline}-\mathrm{COAST})/\mathrm{baseline}\times 100$ and then averaged within each group.}
+\label{tab:solomon_improvement}
+\end{table*}
 
 
 \subsection{Main results on PYTH datasets}
 
-\autoref{tab:pyth_benchmark} reports the results on the five synthetically generated PYTH datasets, while \autoref{fig:pyth_scale} summarizes the scaling trend under greedy decoding. Complementing the Solomon-style experiments, which evaluate robustness across spatial topologies, the PYTH benchmark focuses on scalability by increasing both the number of customers and the fleet size. This setting is therefore useful for examining whether the advantage of COAST persists when route construction and inter-vehicle coordination become increasingly difficult.
+Tables~\ref{tab:pyth_benchmark} and \ref{tab:pyth_benchmark_baselines} report the results on the five synthetically generated PYTH datasets, while Figure~\ref{fig:pyth_scale} summarizes the scaling trend under greedy decoding. Complementing the Solomon-style experiments, which evaluate robustness across spatial topologies, the PYTH benchmark focuses on scalability by increasing both the number of customers and the fleet size. This setting is therefore useful for examining whether the advantage of COAST persists when route construction and inter-vehicle coordination become increasingly difficult.
 
 Across all PYTH scales, COAST(g) achieves the lowest normalized cost among the neural baselines. On the smallest single-vehicle setting, \texttt{n20m1}, COAST(g) obtains 24.78, slightly improving over MARDAM(g), AM(g), and PolyNet(g). Since this setting contains only one vehicle, it provides limited evidence for fleet-level coordination and mainly tests basic route construction. The comparison becomes more informative from \texttt{n50m3} onward, where multiple vehicles must be coordinated. In these multi-vehicle settings, COAST(g) consistently outperforms the baselines, achieving costs of 43.92, 94.85, 182.38, and 355.99 on \texttt{n50m3}, \texttt{n100m5}, \texttt{n200m10}, and \texttt{n400m20}, respectively.
 
@@ -664,21 +657,44 @@ Overall, the PYTH results reinforce the main finding from the Solomon-style expe
 
 \begin{table*}[t]
 \centering
-\caption{PYTH benchmark results. Values are mean normalized cost $\pm$ standard deviation.}
-\label{tab:pyth_benchmark}
-\scriptsize
-\resizebox{\textwidth}{!}{
-\begin{tabular}{lrrrrrrrr}
+{\small
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{lrrrr}
 \toprule
-Dataset & COAST(s) & COAST(g) & MARDAM(s) & MARDAM(g) & AM(s) & AM(g) & PolyNet(s) & PolyNet(g) \\
+& \multicolumn{2}{c}{COAST} & \multicolumn{2}{c}{MARDAM} \\
+Dataset & s & g & s & g \\
 \midrule
-\texttt{n20m1} & $\textbf{24.72}\pm2.40$ & $24.78\pm2.38$ & $26.10\pm3.09$ & $26.13\pm3.16$ & $25.74\pm3.13$ & $25.40\pm2.75$ & $31.84\pm4.08$ & $25.58\pm2.94$ \\
-\texttt{n50m3} & $44.10\pm4.09$ & $\textbf{43.92}\pm4.09$ & $46.85\pm4.71$ & $46.48\pm4.76$ & $50.28\pm5.49$ & $49.58\pm5.00$ & $68.57\pm8.22$ & $49.93\pm5.31$ \\
-\texttt{n100m5} & $95.49\pm5.88$ & $\textbf{94.85}\pm5.89$ & $101.06\pm6.70$ & $99.50\pm6.56$ & $106.18\pm8.06$ & $103.85\pm7.14$ & $144.53\pm12.87$ & $105.13\pm8.42$ \\
-\texttt{n200m10} & $184.70\pm8.95$ & $\textbf{182.38}\pm8.90$ & $209.02\pm14.70$ & $203.24\pm14.43$ & $201.54\pm13.02$ & $196.53\pm10.92$ & $293.54\pm24.83$ & $200.89\pm14.36$ \\
-\texttt{n400m20} & $363.35\pm13.82$ & $\textbf{355.99}\pm13.43$ & $443.86\pm34.78$ & $430.48\pm35.05$ & $389.99\pm21.35$ & $378.98\pm17.10$ & $558.21\pm41.05$ & $389.72\pm26.42$ \\
+\texttt{n20m1} & $\textbf{24.72}\pm2.40$ & $24.78\pm2.38$ & $26.10\pm3.09$ & $26.13\pm3.16$ \\
+\texttt{n50m3} & $44.10\pm4.09$ & $\textbf{43.92}\pm4.09$ & $46.85\pm4.71$ & $46.48\pm4.76$ \\
+\texttt{n100m5} & $95.49\pm5.88$ & $\textbf{94.85}\pm5.89$ & $101.06\pm6.70$ & $99.50\pm6.56$ \\
+\texttt{n200m10} & $184.70\pm8.95$ & $\textbf{182.38}\pm8.90$ & $209.02\pm14.70$ & $203.24\pm14.43$ \\
+\texttt{n400m20} & $363.35\pm13.82$ & $\textbf{355.99}\pm13.43$ & $443.86\pm34.78$ & $430.48\pm35.05$ \\
 \bottomrule
-\end{tabular}}
+\end{tabular}
+}
+\caption{PYTH benchmark results for COAST and MARDAM. Values are mean normalized cost $\pm$ standard deviation.}
+\label{tab:pyth_benchmark}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+{\small
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{lrrrr}
+\toprule
+& \multicolumn{2}{c}{AM} & \multicolumn{2}{c}{PolyNet} \\
+Dataset & s & g & s & g \\
+\midrule
+\texttt{n20m1} & $25.74\pm3.13$ & $25.40\pm2.75$ & $31.84\pm4.08$ & $25.58\pm2.94$ \\
+\texttt{n50m3} & $50.28\pm5.49$ & $49.58\pm5.00$ & $68.57\pm8.22$ & $49.93\pm5.31$ \\
+\texttt{n100m5} & $106.18\pm8.06$ & $103.85\pm7.14$ & $144.53\pm12.87$ & $105.13\pm8.42$ \\
+\texttt{n200m10} & $201.54\pm13.02$ & $196.53\pm10.92$ & $293.54\pm24.83$ & $200.89\pm14.36$ \\
+\texttt{n400m20} & $389.99\pm21.35$ & $378.98\pm17.10$ & $558.21\pm41.05$ & $389.72\pm26.42$ \\
+\bottomrule
+\end{tabular}
+}
+\caption{PYTH benchmark results for AM and PolyNet. Values are mean normalized cost $\pm$ standard deviation.}
+\label{tab:pyth_benchmark_baselines}
 \end{table*}
 
 \begin{figure}[t]
@@ -692,7 +708,7 @@ Dataset & COAST(s) & COAST(g) & MARDAM(s) & MARDAM(g) & AM(s) & AM(g) & PolyNet(
 
 \subsection{Effect of dynamism}
 
-To isolate the effect of online uncertainty, we evaluate a dedicated dynamic benchmark grid built from the same \texttt{n50m3} regime used in training: 50 customers, 3 vehicles, horizon 480, and greedy decoding. The grid contains 512 instances organized as 16 cells, obtained by combining four degrees of dynamism (DoD = 0.10, 0.25, 0.50, 0.75) with four time-window ratios (0.25, 0.50, 0.75, 1.00), with 32 instances per cell. \autoref{tab:dynamic_summary} reports the aggregated cell averages by DoD and by time-window ratio, while \autoref{fig:dynamic_sensitivity} provides cell-level heatmaps over the full DoD $\times$ TW grid for all four neural methods.
+To isolate the effect of online uncertainty, we evaluate a dedicated dynamic benchmark grid built from the same \texttt{n50m3} regime used in training: 50 customers, 3 vehicles, horizon 480, and greedy decoding. The grid contains 512 instances organized as 16 cells, obtained by combining four degrees of dynamism (DoD = 0.10, 0.25, 0.50, 0.75) with four time-window ratios (0.25, 0.50, 0.75, 1.00), with 32 instances per cell. Table~\ref{tab:dynamic_summary} reports the aggregated cell averages by DoD and by time-window ratio, while Figure~\ref{fig:dynamic_sensitivity} provides cell-level heatmaps over the full DoD $\times$ TW grid for all four neural methods.
 
 The full grid confirms that COAST is the best-performing method in all 16 DoD--TW cells. Averaged over the entire grid, COAST attains a mean normalized cost of 43.80, compared with 45.02 for MARDAM, 47.15 for PolyNet, and 47.65 for AM. The best COAST cell occurs at DoD = 0.50 and TW = 0.25 with cost 41.21, while the most difficult cell is DoD = 0.75 and TW = 1.00 with cost 46.88. Even in that hardest setting, COAST remains better than MARDAM (47.96), PolyNet (49.44), and AM (49.53), indicating that the advantage is not confined to easy operating points.
 
@@ -702,11 +718,8 @@ All methods also degrade as the time-window ratio increases. Averaged over DoD, 
 
 \begin{table}[t]
 \centering
-\caption{Dynamic benchmark summary aggregated by degree of dynamism and time-window ratio. Values are mean normalized cost over the corresponding four cells.}
-\label{tab:dynamic_summary}
-\scriptsize
-\setlength{\tabcolsep}{4pt}
-\resizebox{\columnwidth}{!}{
+{\small
+\setlength{\tabcolsep}{1.5pt}
 \begin{tabular}{llrrrr}
 \toprule
 Factor & Level & COAST & MARDAM & PolyNet & AM \\
@@ -721,7 +734,10 @@ TW & 0.50 & \textbf{43.15} & 44.37 & 45.89 & 46.73 \\
 TW & 0.75 & \textbf{44.43} & 45.59 & 47.94 & 48.31 \\
 TW & 1.00 & \textbf{45.90} & 46.62 & 50.76 & 50.73 \\
 \bottomrule
-\end{tabular}}
+\end{tabular}
+}
+\caption{Dynamic benchmark summary aggregated by degree of dynamism and time-window ratio. Values are mean normalized cost over the corresponding four cells.}
+\label{tab:dynamic_summary}
 \end{table}
 
 \begin{figure}[t]
@@ -733,7 +749,7 @@ TW & 1.00 & \textbf{45.90} & 46.62 & 50.76 & 50.73 \\
 
 \subsection{Ablation study}
 
-To isolate the contribution of each architectural component, we evaluate several ablated variants on the PYTH datasets (\autoref{tab:ablation_pyth}). The ablations systematically remove or simplify key components: \textbf{B0} removes all structured signals (no memory, ownership, or lookahead), leaving only the base attention mechanism; \textbf{B1} retains memory-based vehicle state but removes ownership and lookahead; \textbf{B3} includes only the lookahead signal without coordination; \textbf{B5} retains all signals but replaces the learned non-linear fusion with a linear combination; \textbf{EdgeOff} disables explicit edge features while keeping all other components; and two clean ablations remove either the ownership head or the lookahead head individually.
+To isolate the contribution of each architectural component, we evaluate several ablated variants on the PYTH datasets (Tables~\ref{tab:ablation_pyth} and \ref{tab:ablation_modules}). The ablations systematically remove or simplify key components: \textbf{B0} removes all structured signals (no memory, ownership, or lookahead), leaving only the base attention mechanism; \textbf{B1} retains memory-based vehicle state but removes ownership and lookahead; \textbf{B3} includes only the lookahead signal without coordination; \textbf{B5} retains all signals but replaces the learned non-linear fusion with a linear combination; \textbf{EdgeOff} disables explicit edge features while keeping all other components; and two clean ablations remove either the ownership head or the lookahead head individually.
 
 The full COAST model demonstrates consistent advantages once the problem involves sufficient customers and vehicles for coordination to matter. From \texttt{n50m3} to \texttt{n400m20}, COAST outperforms all ablated variants. Removing the ownership signal increases normalized cost by 1.7--2.9\% on medium and large datasets, confirming that explicit fleet-level coordination provides measurable benefit. Removing lookahead produces a smaller but consistent increase of 0.3--1.9\%, indicating that anticipation contributes positively but its standalone effect is more modest than coordination.
 
@@ -743,28 +759,49 @@ The most pronounced ablation effect is observed for B5, which replaces learned n
 
 \begin{table*}[t]
 \centering
-\caption{Ablation results on PYTH datasets. Values are mean normalized cost $\pm$ standard deviation.}
-\label{tab:ablation_pyth}
-\scriptsize
-\resizebox{\textwidth}{!}{
-\begin{tabular}{lrrrrrrrr}
+{\small
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{lrrrrr}
 \toprule
-Dataset & COAST & B0 & B1 & B3 & B5 & EdgeOff & no\_ownership & no\_lookahead \\
+Dataset & COAST & B0 & B1 & B3 & B5 \\
 \midrule
-\texttt{n20m1} & $24.78\pm2.38$ & $\textbf{23.51}\pm2.36$ & $23.81\pm2.43$ & $23.45\pm2.43$ & $23.79\pm2.42$ & $24.91\pm2.34$ & $23.37\pm2.46$ & $23.96\pm2.49$ \\
-\texttt{n50m3} & $\textbf{43.92}\pm4.09$ & $45.28\pm4.26$ & $45.43\pm4.32$ & $44.91\pm4.25$ & $45.49\pm4.31$ & $45.43\pm4.20$ & $45.20\pm4.25$ & $44.74\pm4.22$ \\
-\texttt{n100m5} & $\textbf{94.85}\pm5.89$ & $97.35\pm6.17$ & $97.71\pm6.36$ & $96.86\pm6.15$ & $101.67\pm9.02$ & $97.25\pm5.99$ & $97.44\pm6.27$ & $96.44\pm6.17$ \\
-\texttt{n200m10} & $\textbf{182.38}\pm8.90$ & $186.52\pm9.21$ & $186.26\pm9.63$ & $184.75\pm9.13$ & $259.10\pm34.30$ & $186.94\pm8.90$ & $186.22\pm9.26$ & $184.33\pm9.43$ \\
-\texttt{n400m20} & $\textbf{355.99}\pm13.43$ & $363.43\pm13.86$ & $361.33\pm14.61$ & $357.81\pm13.77$ & $515.72\pm67.45$ & $365.43\pm13.16$ & $362.11\pm13.56$ & $357.18\pm14.44$ \\
+\texttt{n20m1} & $24.78\pm2.38$ & $\textbf{23.51}\pm2.36$ & $23.81\pm2.43$ & $23.45\pm2.43$ & $23.79\pm2.42$ \\
+\texttt{n50m3} & $\textbf{43.92}\pm4.09$ & $45.28\pm4.26$ & $45.43\pm4.32$ & $44.91\pm4.25$ & $45.49\pm4.31$ \\
+\texttt{n100m5} & $\textbf{94.85}\pm5.89$ & $97.35\pm6.17$ & $97.71\pm6.36$ & $96.86\pm6.15$ & $101.67\pm9.02$ \\
+\texttt{n200m10} & $\textbf{182.38}\pm8.90$ & $186.52\pm9.21$ & $186.26\pm9.63$ & $184.75\pm9.13$ & $259.10\pm34.30$ \\
+\texttt{n400m20} & $\textbf{355.99}\pm13.43$ & $363.43\pm13.86$ & $361.33\pm14.61$ & $357.81\pm13.77$ & $515.72\pm67.45$ \\
 \bottomrule
-\end{tabular}}
+\end{tabular}
+}
+\caption{PYTH ablation results for the structured-signal variants. Values are mean normalized cost $\pm$ standard deviation.}
+\label{tab:ablation_pyth}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+{\small
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{lrrrr}
+\toprule
+Dataset & COAST & EdgeOff & \shortstack{no\\ownership} & \shortstack{no\\lookahead} \\
+\midrule
+\texttt{n20m1} & $24.78\pm2.38$ & $24.91\pm2.34$ & $23.37\pm2.46$ & $23.96\pm2.49$ \\
+\texttt{n50m3} & $\textbf{43.92}\pm4.09$ & $45.43\pm4.20$ & $45.20\pm4.25$ & $44.74\pm4.22$ \\
+\texttt{n100m5} & $\textbf{94.85}\pm5.89$ & $97.25\pm5.99$ & $97.44\pm6.27$ & $96.44\pm6.17$ \\
+\texttt{n200m10} & $\textbf{182.38}\pm8.90$ & $186.94\pm8.90$ & $186.22\pm9.26$ & $184.33\pm9.43$ \\
+\texttt{n400m20} & $\textbf{355.99}\pm13.43$ & $365.43\pm13.16$ & $362.11\pm13.56$ & $357.18\pm14.44$ \\
+\bottomrule
+\end{tabular}
+}
+\caption{PYTH ablation results for edge features and individual decision heads. Values are mean normalized cost $\pm$ standard deviation.}
+\label{tab:ablation_modules}
 \end{table*}
 
 \subsection{Hypothesis analysis}
 
-The proposed method is built around four architectural claims: \textbf{(H1)} explicit ownership improves fleet coordination, \textbf{(H2)} candidate-conditioned lookahead reduces myopic dispatching, \textbf{(H3)} edge-aware scoring improves constraint handling, and \textbf{(H4)} non-linear fusion is needed to combine these signals robustly. These hypotheses are not tested by a single benchmark alone. Instead, we validate them using complementary evidence from the PYTH scale experiments, the targeted ablations in \autoref{tab:ablation_pyth}, and the dynamic-grid analysis in \autoref{tab:dynamic_summary} and \autoref{fig:dynamic_sensitivity}. This design is important because each hypothesis concerns a different failure mode: coordination across vehicles, anticipation of future consequences, sensitivity to edge-level feasibility, and interaction among multiple decision signals.
+The proposed method is built around four architectural claims: \textbf{(H1)} explicit ownership improves fleet coordination, \textbf{(H2)} candidate-conditioned lookahead reduces myopic dispatching, \textbf{(H3)} edge-aware scoring improves constraint handling, and \textbf{(H4)} non-linear fusion is needed to combine these signals robustly. These hypotheses are not tested by a single benchmark alone. Instead, we validate them using complementary evidence from the PYTH scale experiments, the targeted ablations in Tables~\ref{tab:ablation_pyth} and \ref{tab:ablation_modules}, and the dynamic-grid analysis in Table~\ref{tab:dynamic_summary} and Figure~\ref{fig:dynamic_sensitivity}. This design is important because each hypothesis concerns a different failure mode: coordination across vehicles, anticipation of future consequences, sensitivity to edge-level feasibility, and interaction among multiple decision signals.
 
-\autoref{tab:hypotheses} summarizes the mapping from hypothesis to comparison. For H1 and H2, the cleanest tests are direct removals of the ownership and lookahead modules, respectively. For H3, the relevant comparison is COAST versus EdgeOff, especially under the tighter time-window and higher-dynamism cells where feasibility pressure is strongest. For H4, the key comparison is COAST versus B5, which keeps all signals but replaces the learned MLP fusion with a linear combination. Throughout this subsection, we emphasize \texttt{n50m3} and larger instances, because \texttt{n20m1} contains only one vehicle and therefore cannot serve as strong evidence for coordination-oriented claims.
+Table~\ref{tab:hypotheses} summarizes the mapping from hypothesis to comparison. For H1 and H2, the cleanest tests are direct removals of the ownership and lookahead modules, respectively. For H3, the relevant comparison is COAST versus EdgeOff, especially under the tighter time-window and higher-dynamism cells where feasibility pressure is strongest. For H4, the key comparison is COAST versus B5, which keeps all signals but replaces the learned MLP fusion with a linear combination. Throughout this subsection, we emphasize \texttt{n50m3} and larger instances, because \texttt{n20m1} contains only one vehicle and therefore cannot serve as strong evidence for coordination-oriented claims.
 
 \textbf{H1 (ownership improves coordination)} asks whether the explicit ownership mechanism contributes beyond the shared policy backbone. The evidence is strongest in the clean COAST versus no-ownership comparison: from \texttt{n50m3} onward, removing ownership increases normalized cost by 1.7--2.9\%. This confirms that the per-vehicle coordination memory and learned ownership bias contribute to more efficient fleet allocation once multiple vehicles must compete for dynamically revealed customers.
 
@@ -778,11 +815,9 @@ Overall, the hypothesis tests support the central decomposition strategy, but wi
 
 \begin{table*}[t]
 \centering
-\caption{Hypothesis evaluation summary. Positive gaps indicate that the ablated variant incurs higher cost than COAST.}
-\label{tab:hypotheses}
-\footnotesize
-\resizebox{\textwidth}{!}{
-\begin{tabular}{llll}
+{\small
+\setlength{\tabcolsep}{1pt}
+\begin{tabular}{p{0.20\textwidth}p{0.16\textwidth}p{0.38\textwidth}p{0.20\textwidth}}
 \toprule
 Hypothesis & Comparison & Main evidence & Conclusion \\
 \midrule
@@ -791,7 +826,10 @@ H2: lookahead reduces myopia & COAST vs no\_lookahead & no\_lookahead is 0.3--1.
 H3: edge features improve feasibility & COAST vs EdgeOff & EdgeOff is 2.5--3.4\% worse on PYTH scale; tight-TW cost is 48.00 vs 46.13 & Supported, especially under tight constraints \\
 H4: nonlinear fusion improves robustness & COAST vs B5 & B5 is 7.2\% worse on \texttt{n100m5}, 42.1\% on \texttt{n200m10}, and 44.9\% on \texttt{n400m20} & Strongly supported at scale \\
 \bottomrule
-\end{tabular}}
+\end{tabular}
+}
+\caption{Hypothesis evaluation summary. Positive gaps indicate that the ablated variant incurs higher cost than COAST.}
+\label{tab:hypotheses}
 \end{table*}
 
 Overall, the results demonstrate that COAST is most effective in the regimes targeted by its architecture: medium-to-large dynamic routing problems where vehicle coordination, temporal feasibility, and action-conditioned anticipation interact. The small single-vehicle regime (\texttt{n20m1}) is less favorable to the full model, which is expected given that coordination requirements are minimal in this setting.
@@ -801,6 +839,7 @@ Overall, the results demonstrate that COAST is most effective in the regimes tar
 Several limitations of the current study should be acknowledged. First, the reported results are based on single-seed training for each model configuration. The smaller effect sizes observed for the lookahead and ownership ablations could be sensitive to training variance; multi-seed experiments with statistical significance testing would strengthen confidence in these findings. Second, the lookahead head is trained solely through the policy gradient objective; a supervised calibration target could potentially enhance its effectiveness and provide a clearer signal for validating the anticipation hypothesis. Third, the current evaluation focuses on normalized routing cost as the primary metric; a more detailed decomposition into travel distance, skipped requests, and time-window penalties would provide additional insight into behavioral differences between methods. Finally, classical optimization baselines such as LKH3 and OR-Tools, while informative for static or oracle settings, are not directly applicable to the dynamic sequential decision framework without substantial modification; their inclusion remains an avenue for future work.
 
 \section{Conclusions and Future works} \label{sec:futurework}
-\bibliographystyle{plain}
+% Avoid stretching the final, partially filled references page.
+\raggedbottom
 \bibliography{ref}
 \end{document}

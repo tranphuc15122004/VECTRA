@@ -12,7 +12,7 @@
   "latex-workshop.linter.chktex.enabled": false,
   "latex-workshop.latex.autoBuild.run": "onSave",
   "latex-workshop.latex.autoBuild.saveCache": false,
-  "latex-workshop.latex.rootFile.indicator": "\\\\title\\{COAST:",
+  "latex-workshop.latex.rootFile.indicator": "\\\\documentclass",
   "latex-workshop.latex.tools": [
     {
       "name": "latexmk",
@@ -25,7 +25,11 @@
         "-cd",
         "-f",
         "main_AAAI"
-      ]
+      ],
+      "env": {
+        "TEXINPUTS": "../AuthorKit27//:",
+        "BSTINPUTS": "../AuthorKit27//:"
+      }
     }
   ]
 }

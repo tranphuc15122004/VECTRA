@@ -1,0 +1,94 @@
+\begin{thebibliography}{18}
+\providecommand{\natexlab}[1]{#1}
+
+\bibitem[{Akkerman, Mes, and van Jaarsveld(2025)}]{akkerman2025comparison}
+Akkerman, F.; Mes, M.; and van Jaarsveld, W. 2025.
+\newblock A comparison of reinforcement learning policies for dynamic vehicle routing problems with stochastic customer requests.
+\newblock \emph{Computers \& Industrial Engineering}, 200: 110747.
+
+\bibitem[{Gao et~al.(2023)Gao, Shang, Xue, Li, and Qian}]{gao2023towards}
+Gao, C.; Shang, H.; Xue, K.; Li, D.; and Qian, C. 2023.
+\newblock Towards generalizable neural solvers for vehicle routing problems via ensemble with transferrable local policy.
+\newblock \emph{arXiv preprint arXiv:2308.14104}.
+
+\bibitem[{Hottung, Mahajan, and Tierney(2025)}]{hottung2025polynet}
+Hottung, A.; Mahajan, M.; and Tierney, K. 2025.
+\newblock PolyNet: Learning diverse solution strategies for neural combinatorial optimization.
+\newblock In \emph{International Conference on Learning Representations}, volume 2025, 80417--80435.
+
+\bibitem[{Konovalenko and Hvattum(2024)}]{konovalenko2024optimizing}
+Konovalenko, A.; and Hvattum, L.~M. 2024.
+\newblock Optimizing a dynamic vehicle routing problem with deep reinforcement learning: Analyzing state-space components.
+\newblock \emph{Logistics}, 8(4): 96.
+
+\bibitem[{Kool, Van~Hoof, and Welling(2018)}]{kool2018attention}
+Kool, W.; Van~Hoof, H.; and Welling, M. 2018.
+\newblock Attention, learn to solve routing problems!
+\newblock \emph{arXiv preprint arXiv:1803.08475}.
+
+\bibitem[{Kool, van Hoof, and Welling(2019)}]{kool2019attention}
+Kool, W.; van Hoof, H.; and Welling, M. 2019.
+\newblock Attention, Learn to Solve Routing Problems!
+\newblock In \emph{International Conference on Learning Representations (ICLR)}.
+
+\bibitem[{Li et~al.(2024)Li, Liu, Zheng, Zhang, and Wang}]{li2024cada}
+Li, H.; Liu, F.; Zheng, Z.; Zhang, Y.; and Wang, Z. 2024.
+\newblock CaDA: Cross-problem routing solver with constraint-aware dual-attention.
+\newblock \emph{arXiv preprint arXiv:2412.00346}.
+
+\bibitem[{Luo et~al.(2025)Luo, Lin, Wu, Wang, Tong, Yuan, and Zhang}]{luo2025boosting}
+Luo, F.; Lin, X.; Wu, Y.; Wang, Z.; Tong, X.; Yuan, M.; and Zhang, Q. 2025.
+\newblock Boosting Neural Combinatorial Optimization for Large-Scale Vehicle Routing Problems.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}.
+
+\bibitem[{Meng et~al.(2025)Meng, Cao, Wu, Hou, Ge, and Zhang}]{meng2025eformer}
+Meng, D.; Cao, Z.; Wu, Y.; Hou, Y.; Ge, H.; and Zhang, Q. 2025.
+\newblock Eformer: An effective edge-based transformer for vehicle routing problems.
+\newblock \emph{arXiv preprint arXiv:2506.16428}.
+
+\bibitem[{Nazari et~al.(2018)Nazari, Oroojlooy, Snyder, and Tak{\'a}{\v{c}}}]{nazari2018reinforcement}
+Nazari, M.; Oroojlooy, A.; Snyder, L.; and Tak{\'a}{\v{c}}, M. 2018.
+\newblock Reinforcement learning for solving the vehicle routing problem.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, volume~31, 9839--9849.
+
+\bibitem[{Psaraftis(1988)}]{psaraftis1988dynamic}
+Psaraftis, H.~N. 1988.
+\newblock Dynamic vehicle routing problems.
+\newblock \emph{Vehicle routing: Methods and studies}, 16: 223--248.
+
+\bibitem[{Shahbazian et~al.(2025)Shahbazian, Ciacco, Macrina, and Guerriero}]{shahbazian2025knowledge}
+Shahbazian, R.; Ciacco, A.; Macrina, G.; and Guerriero, F. 2025.
+\newblock Knowledge-guided hybrid deep reinforcement learning for the dynamic multi-depot electric vehicle routing problem.
+\newblock \emph{Computers \& Operations Research}, 107217.
+
+\bibitem[{Tam et~al.(2026)Tam, Anh, Tung, {Huynh Thi Thanh}, and Vinh}]{TAM2026114234}
+Tam, N.~T.; Anh, N.~D.; Tung, D.~V.; {Huynh Thi Thanh}, B.; and Vinh, L.~T. 2026.
+\newblock Evolving routing and sequencing policies for dynamic vehicle routing problem with time windows.
+\newblock \emph{Applied Soft Computing}, 189: 114234.
+
+\bibitem[{Toth and Vigo(2014)}]{toth2014vehicle}
+Toth, P.; and Vigo, D. 2014.
+\newblock \emph{Vehicle routing: problems, methods, and applications}.
+\newblock SIAM.
+
+\bibitem[{Vaswani, Shazeer, and Parmar(2017)}]{vaswani2017attention}
+Vaswani, A.; Shazeer, N.; and Parmar, N. 2017.
+\newblock Attention is all you need.
+\newblock \emph{NeurIPS}.
+
+\bibitem[{Wang et~al.(2024)Wang, Cao, Wu, Teng, and Wu}]{wang2024deep}
+Wang, C.; Cao, Z.; Wu, Y.; Teng, L.; and Wu, G. 2024.
+\newblock Deep reinforcement learning for solving vehicle routing problems with backhauls.
+\newblock \emph{IEEE Transactions on Neural Networks and Learning Systems}, 36(3): 4779--4793.
+
+\bibitem[{Xia et~al.(2025)Xia, Jin, Huang, Hu, Huo, Wang, Feng, Li, and Li}]{xia2025multi}
+Xia, D.; Jin, Y.; Huang, M.; Hu, Y.; Huo, Y.; Wang, Z.; Feng, F.; Li, Y.; and Li, H. 2025.
+\newblock A multi-head adaptive actor-critic algorithm for solving vehicle routing problems.
+\newblock \emph{Applied Intelligence}, 55(13): 908.
+
+\bibitem[{Zhang et~al.(2020)Zhang, He, Zhang, Lin, and Li}]{zhang2020multi}
+Zhang, K.; He, F.; Zhang, Z.; Lin, X.; and Li, M. 2020.
+\newblock Multi-vehicle routing problems with soft time windows: A multi-agent reinforcement learning approach.
+\newblock \emph{Transportation Research Part C: Emerging Technologies}, 121: 102861.
+
+\end{thebibliography}
