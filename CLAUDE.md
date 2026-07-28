@@ -120,7 +120,7 @@ DVRPTW_Environment
   ↓ Three parallel heads:
   →  CrossEdgeFusion (attention + edge bias) → s_att
   →  LookaheadHead (MLP([veh_repr, cust_j, edge_j])) → s_look
-  →  OwnershipHead (memory·cust_repr^T / √D → log-softmax) → s_owner
+  →  OwnershipHead (softmax over fleet → gather current vehicle → log) → s_owner
   → Z-normalize each signal over valid candidates
   → MLP fusion (3→64→1) or linear weighted sum → compat
   → mask + softmax → greedy argmax / multinomial sample → j*
@@ -140,7 +140,8 @@ The environment re-encodes customers when new orders become visible (`dyna.new_c
 | `DVRPTW_Environment` | `problems/_env_dtw.py` |
 | `DVRPTW_Dataset` | `problems/_data_dtw.py` |
 | CLI args + ablation profiles | `utils/_args.py` |
-| Checkpoint loading | `utils/_chkpt.py` |
+| Checkpoint saving | `utils/_chkpt.py` |
+| Model weight / config loading | `utils/_args.py` (`--config-file`), `MODEL/infer.py` |
 | `AttentionLearner` (old baseline) | `_learner.py` |
 
 ### Ablation Profiles

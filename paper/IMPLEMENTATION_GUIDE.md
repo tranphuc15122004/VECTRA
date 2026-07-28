@@ -24,7 +24,7 @@ nvidia-smi
 ### 0.2 Directory Structure
 
 ```bash
-cd /home/admin_wsl/projects/mardam-master
+cd /home/tuantb/mardam
 
 # Create output directories
 mkdir -p output/ablation/{vectra,b0,b1,b3,b5,edgeoff}
@@ -39,8 +39,8 @@ ls -la data/_Ablation/B1/chkpt_best.pyth     # B1-Memory
 ls -la data/_Ablation/B3/chkpt_best.pyth     # B3-Look
 ls -la data/_Ablation/B5/chkpt_best.pyth     # B5-Linear
 ls -la data/_Ablation/Edgeoff/chkpt_best.pyth # EdgeOff
-ls -la /home/admin_wsl/projects/RL4DVRPTW/data/_AM/chkpt_best.pyth      # AM
-ls -la /home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/chkpt_best.pyth  # PolyNet
+ls -la {{RL4DVRPTW_ROOT}}/data/_AM/chkpt_best.pyth      # AM
+ls -la {{RL4DVRPTW_ROOT}}/data/_PolyNet/chkpt_best.pyth  # PolyNet
 ```
 
 ---
@@ -50,7 +50,7 @@ ls -la /home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/chkpt_best.pyth  # PolyN
 ### 1.1 In-Distribution Test Set (1000 instances)
 
 ```bash
-cd /home/admin_wsl/projects/mardam-master
+cd /home/tuantb/mardam
 
 python -c "
 import torch
@@ -71,8 +71,8 @@ data = DVRPTW_Dataset.generate(
     cust_dur_range=(10,31),
     tw_ratio=[0.25, 0.5, 0.75, 1.0],
     cust_tw_range=[30, 91],
-    deg_of_dyna=[0.1, 0.25, 0.5, 0.75],
-    appear_early_ratio=[0.0, 0.5, 0.75, 1.0],
+    dod=[0.1, 0.25, 0.5, 0.75],
+    d_early_ratio=[0.0, 0.5, 0.75, 1.0],
 )
 data.normalize()
 torch.save(data, 'data/test_sets/test_dvrptw_n50m3_id_1000.pyth')
@@ -84,7 +84,7 @@ print(f'Deg of dyna: min={(data.nodes[:,:,6]>0).sum(dim=1).float().mean().item()
 ### 1.2 OOD Test Sets
 
 ```bash
-cd /home/admin_wsl/projects/mardam-master
+cd /home/tuantb/mardam
 
 # OOD-Scale: n=100, m=5
 python -c "
@@ -94,7 +94,7 @@ torch.manual_seed(9998)
 data = DVRPTW_Dataset.generate(500, cust_count=100, veh_count=5, veh_capa=200,
     veh_speed=1, cust_loc_range=(0,101), cust_dem_range=(5,41), horizon=480,
     cust_dur_range=(10,31), tw_ratio=[0.25,0.5,0.75,1.0], cust_tw_range=[30,91],
-    deg_of_dyna=[0.1,0.25,0.5,0.75], appear_early_ratio=[0.0,0.5,0.75,1.0])
+    dod=[0.1,0.25,0.5,0.75], d_early_ratio=[0.0,0.5,0.75,1.0])
 data.normalize()
 torch.save(data, 'data/test_sets/test_dvrptw_n100m5_ood_500.pyth')
 print('OOD-Scale saved')
@@ -108,7 +108,7 @@ torch.manual_seed(9997)
 data = DVRPTW_Dataset.generate(500, cust_count=50, veh_count=6, veh_capa=200,
     veh_speed=1, cust_loc_range=(0,101), cust_dem_range=(5,41), horizon=480,
     cust_dur_range=(10,31), tw_ratio=[0.25,0.5,0.75,1.0], cust_tw_range=[30,91],
-    deg_of_dyna=[0.1,0.25,0.5,0.75], appear_early_ratio=[0.0,0.5,0.75,1.0])
+    dod=[0.1,0.25,0.5,0.75], d_early_ratio=[0.0,0.5,0.75,1.0])
 data.normalize()
 torch.save(data, 'data/test_sets/test_dvrptw_n50m6_ood_500.pyth')
 print('OOD-Fleet saved')
@@ -122,7 +122,7 @@ torch.manual_seed(9996)
 data = DVRPTW_Dataset.generate(500, cust_count=50, veh_count=3, veh_capa=200,
     veh_speed=1, cust_loc_range=(0,101), cust_dem_range=(5,41), horizon=480,
     cust_dur_range=(10,31), tw_ratio=[0.8,0.9,1.0], cust_tw_range=[10,40],
-    deg_of_dyna=[0.1,0.25,0.5,0.75], appear_early_ratio=[0.0,0.5,0.75,1.0])
+    dod=[0.1,0.25,0.5,0.75], d_early_ratio=[0.0,0.5,0.75,1.0])
 data.normalize()
 torch.save(data, 'data/test_sets/test_dvrptw_n50m3_tight_ood_500.pyth')
 print('OOD-Tight saved')
@@ -136,7 +136,7 @@ torch.manual_seed(9995)
 data = DVRPTW_Dataset.generate(500, cust_count=50, veh_count=3, veh_capa=200,
     veh_speed=1, cust_loc_range=(0,101), cust_dem_range=(5,41), horizon=480,
     cust_dur_range=(10,31), tw_ratio=[0.25,0.5,0.75,1.0], cust_tw_range=[30,91],
-    deg_of_dyna=[0.5,0.75,1.0], appear_early_ratio=[0.0,0.25,0.5])
+    dod=[0.5,0.75,1.0], d_early_ratio=[0.0,0.25,0.5])
 data.normalize()
 torch.save(data, 'data/test_sets/test_dvrptw_n50m3_burst_ood_500.pyth')
 print('OOD-Burst saved')
@@ -150,7 +150,7 @@ torch.manual_seed(9994)
 data = DVRPTW_Dataset.generate(500, cust_count=50, veh_count=3, veh_capa=200,
     veh_speed=1, cust_loc_range=(0,201), cust_dem_range=(5,41), horizon=480,
     cust_dur_range=(10,31), tw_ratio=[0.25,0.5,0.75,1.0], cust_tw_range=[30,91],
-    deg_of_dyna=[0.1,0.25,0.5,0.75], appear_early_ratio=[0.0,0.5,0.75,1.0])
+    dod=[0.1,0.25,0.5,0.75], d_early_ratio=[0.0,0.5,0.75,1.0])
 data.normalize()
 torch.save(data, 'data/test_sets/test_dvrptw_n50m3_sparse_ood_500.pyth')
 print('OOD-Sparse saved')
@@ -169,7 +169,7 @@ Create `script/train_all_seeds.sh`:
 #!/bin/bash
 set -e
 
-PROJECT_ROOT="/home/admin_wsl/projects/mardam-master"
+PROJECT_ROOT="/home/tuantb/mardam"
 cd "$PROJECT_ROOT"
 
 # ============ CONFIGURATION ============
@@ -289,13 +289,13 @@ def load_vectra_from_checkpoint(ckpt_path, device, use_args_from_ckpt=True):
         cust_feat_size=7,
         veh_state_size=4,
         model_size=args.get("model_size", 128),
-        layer_count=args.get("layer_count", 2),
-        head_count=args.get("head_count", 4),
-        ff_size=args.get("ff_size", 256),
+        layer_count=args.get("layer_count", 3),
+        head_count=args.get("head_count", 8),
+        ff_size=args.get("ff_size", 512),
         tanh_xplor=args.get("tanh_xplor", 10),
         greedy=True,  # GREEDY for evaluation
         edge_feat_size=args.get("edge_feat_size", 8),
-        memory_size=args.get("memory_size", 128),
+        memory_size=args.get("memory_size", None),
         lookahead_hidden=args.get("lookahead_hidden", 128),
         dropout=args.get("dropout", 0.1),
         use_edge_features=args.get("use_edge_features", True),
@@ -394,7 +394,7 @@ if __name__ == "__main__":
 ### 3.2 Run Evaluation
 
 ```bash
-cd /home/admin_wsl/projects/mardam-master
+cd /home/tuantb/mardam
 
 # In-distribution evaluation
 python script/eval_unified.py \
@@ -419,7 +419,7 @@ for model, stats in sorted(results.items(), key=lambda x: x[1]['mean']):
 ### 4.1 Greedy Nearest Neighbor
 
 ```bash
-cd /home/admin_wsl/projects/mardam-master
+cd /home/tuantb/mardam
 
 python -c "
 import torch, sys, os
@@ -466,7 +466,7 @@ Create `script/eval_literature.py`:
 import torch, os, sys, json, argparse
 
 # Add RL4DVRPTW to path for AM/Polynet imports
-RL4DVRPTW = "/home/admin_wsl/projects/RL4DVRPTW"
+RL4DVRPTW = "{{RL4DVRPTW_ROOT}}"
 sys.path.insert(0, RL4DVRPTW)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -487,7 +487,7 @@ def evaluate_am(checkpoint_path, data, device):
         model_size=args.get("model_size", 128),
         layer_count=args.get("layer_count", 5),
         head_count=args.get("head_count", 8),
-        ff_size=args.get("ff_size", 256),
+        ff_size=args.get("ff_size", 512),
         greedy=True,
     )
     
@@ -539,7 +539,7 @@ def evaluate_polynet(checkpoint_path, data, device):
         model_size=args.get("model_size", 128),
         layer_count=args.get("layer_count", 5),
         head_count=args.get("head_count", 8),
-        ff_size=args.get("ff_size", 256),
+        ff_size=args.get("ff_size", 512),
         greedy=True,
         k=args.get("k", 32),
     )
@@ -587,7 +587,7 @@ def main():
     results = {}
     
     # AM
-    am_ckpt = "/home/admin_wsl/projects/RL4DVRPTW/data/_AM/chkpt_best.pyth"
+    am_ckpt = "{{RL4DVRPTW_ROOT}}/data/_AM/chkpt_best.pyth"
     if os.path.exists(am_ckpt):
         print("\nEvaluating AM...")
         costs = evaluate_am(am_ckpt, data, device)
@@ -595,7 +595,7 @@ def main():
         print(f"  AM: {costs.mean():.4f} ± {costs.std():.4f}")
     
     # PolyNet
-    poly_ckpt = "/home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/chkpt_best.pyth"
+    poly_ckpt = "{{RL4DVRPTW_ROOT}}/data/_PolyNet/chkpt_best.pyth"
     if os.path.exists(poly_ckpt):
         print("\nEvaluating PolyNet...")
         costs = evaluate_polynet(poly_ckpt, data, device)
@@ -644,7 +644,7 @@ def load_model(ckpt_path, device, greedy=True):
     args = checkpoint.get("args", {})
     learner = VECTRA(
         7, 4, model_size=128, layer_count=2, head_count=4, ff_size=256,
-        tanh_xplor=10, greedy=greedy, memory_size=128, lookahead_hidden=128,
+        tanh_xplor=10, greedy=greedy, memory_size=None, lookahead_hidden=128,
         dropout=0.1, use_edge_features=args.get("use_edge_features", True),
         use_memory=args.get("use_memory", True),
         use_ownership=args.get("use_ownership", True),
@@ -737,7 +737,7 @@ def load_model(ckpt_path, device):
     args = checkpoint.get("args", {})
     learner = VECTRA(
         7, 4, model_size=128, layer_count=2, head_count=4, ff_size=256,
-        tanh_xplor=10, greedy=True, memory_size=128, lookahead_hidden=128,
+        tanh_xplor=10, greedy=True, memory_size=None, lookahead_hidden=128,
         dropout=0.1, use_edge_features=args.get("use_edge_features", True),
         use_memory=args.get("use_memory", True),
         use_ownership=args.get("use_ownership", True),
@@ -835,7 +835,7 @@ if __name__ == "__main__":
 ## 📍 STEP 7: OOD Evaluation (Day 14-16)
 
 ```bash
-cd /home/admin_wsl/projects/mardam-master
+cd /home/tuantb/mardam
 
 # Evaluate all models on each OOD test set
 for ood in n100m5_ood n50m6_ood n50m3_tight_ood n50m3_burst_ood n50m3_sparse_ood; do

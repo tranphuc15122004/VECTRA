@@ -41,13 +41,13 @@ Use this first. It reuses raw VECTRA and MARDAM summaries already present under 
 ```bash
 PYTHONPATH=. python script/build_experimental_report.py \
   --discover-nested \
-  --results-root "Experimental result-20260526T064624Z-3-001/Experimental result/dynamic_benchmark"
+  --results-root "output/dynamic_benchmark"
 ```
 
 Paper-facing outputs:
 
 ```text
-Experimental result-20260526T064624Z-3-001/Experimental result/dynamic_benchmark/paper_ready/
+output/dynamic_benchmark/paper_ready/
 ├── manifest.json
 ├── master_summary.csv
 ├── cell_summary.csv
@@ -76,7 +76,7 @@ DATASETS_ROOT=/path/to/dvrptw_dynamic_grid \
 OUTPUT_ROOT=output/dynamic_benchmark_verified \
 VERIFY_ROUTES=1 \
 INCLUDE_EXTERNAL=1 \
-RL4DVRPTW_ROOT=/home/admin_wsl/projects/RL4DVRPTW \
+RL4DVRPTW_ROOT={{RL4DVRPTW_ROOT}} \
 bash script/run_dynamic_experiment_matrix.sh
 ```
 
@@ -132,7 +132,7 @@ Embed OOD in the main report:
 ```bash
 PYTHONPATH=. python script/build_experimental_report.py \
   --discover-nested \
-  --results-root "Experimental result-20260526T064624Z-3-001/Experimental result/dynamic_benchmark" \
+  --results-root "output/dynamic_benchmark" \
   --ood-summary output/ood_eval/ood_summary.csv
 ```
 
@@ -173,7 +173,7 @@ Embed behavior in the main report:
 ```bash
 PYTHONPATH=. python script/build_experimental_report.py \
   --discover-nested \
-  --results-root "Experimental result-20260526T064624Z-3-001/Experimental result/dynamic_benchmark" \
+  --results-root "output/dynamic_benchmark" \
   --behavior-summary output/behavior_analysis/behavior_summary.csv
 ```
 

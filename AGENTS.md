@@ -20,7 +20,7 @@
 
 ```bash
 # Train
-python MODEL/train.py --problem dvrptw --cust-count 50 --epoch-count 500
+python MODEL/train.py --problem-type dvrptw --customers-count 50 --epoch-count 500
 bash script/train_vectra_main.sh
 
 # PPO training
@@ -46,7 +46,7 @@ DATA → DVRPTW_Environment → VECTRA model (forward) → Baseline (trajectory)
 
 1. **Customer Encoding** (`GraphEncoder`): Self-attention over customer nodes with RBF distance bias
 2. **Vehicle Encoding** (`FleetEncoder`): Cross-attention from acting vehicle to customer representations, masked by feasibility
-3. **Edge Features** (`EdgeFeatureEncoder`): 8D per (vehicle, customer) pair (distance, arrival, wait, late, slack, feasible, cap_gap, travel_time)
+3. **Edge Features** (`EdgeFeatureEncoder`): 8D per (vehicle, customer) pair (distance, travel_time, arrival, wait, late, slack, feasible, cap_gap)
 4. **Three signal heads** → MLP fusion → action logits:
    - **Attention**: vehicle × customer compatibility
    - **Ownership** (`OwnershipHead`): Memory-based soft assignment to reduce fleet overlap
@@ -57,7 +57,7 @@ DATA → DVRPTW_Environment → VECTRA model (forward) → Baseline (trajectory)
 - **CUDA device asserts**: If a CUDA assert fires, the context is invalidated. The training loop skips that checkpoint to avoid corruption. See `_is_cuda_device_assert_error()` in `MODEL/train.py`.
 - **AMP GradScaler**: Hardcoded to `'cuda'` device string in `train.py`. CPU-only training uses `--no-cuda`.
 - **PyTorch version compat**: Tries `torch.amp` (2.0+) with fallback to `torch.cuda.amp` (1.x).
-- **Ablation profiles** (`utils/_args.py` → `_apply_ablation_profile()`): 6 profiles (`vectra`, `b0`–`b5`, `edgeoff`) toggle feature flags. Must use the same profile for training and inference.
+- **Ablation profiles** (`utils/_args.py` → `_apply_ablation_profile()`): 16 profiles (`vectra`, `b0`–`b5`, `edgeoff`, `no_ownership`, `no_lookahead`, `noownership`, `nolookahead`, `a0`–`a4`, `a9`, `none`) toggle feature flags. Must use the same profile for training and inference.
 - **Model weight loading** (`utils/_chkpt.py`): Auto-detects `args.json` sibling file to reconstruct config. If missing, falls back to current CLI defaults — may silently misconfigure.
 - **No auxiliary loss**: `LookaheadHead` and `OwnershipHead` have no supervised targets. They're trained solely through policy gradient.
 - **Checkpoint pruning**: Only last 5 checkpoints kept by default (`CHECKPOINT_PERIOD = 5`).

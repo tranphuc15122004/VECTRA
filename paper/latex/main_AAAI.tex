@@ -11,6 +11,18 @@
 
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
+\renewcommand{\dbltopfraction}{0.9}
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\dbltextfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.8}
+\setcounter{topnumber}{5}
+\setcounter{bottomnumber}{5}
+\setcounter{totalnumber}{10}
+\setcounter{dbltopnumber}{5}
 
 \pdfinfo{
 /TemplateVersion (2027.1)
@@ -57,430 +69,128 @@ The remainder of this paper is organized as follows. Section~\ref{sec:related} r
 \section{Related Work}
 \label{sec:related}
 
-Deep Reinforcement Learning (DRL) has emerged as a competitive paradigm for neural combinatorial optimization in VRPs \cite{nazari2018reinforcement}. Early studies employed recurrent encoder--decoder architectures trained with policy gradients to learn routing heuristics directly from data \cite{nazari2018reinforcement}. Subsequently, attention-based models replaced recurrent networks with Transformer architectures, substantially improving representation learning and solution quality across a wide range of VRP variants \cite{kool2018attention}. More recent research has focused on enhancing the scalability, generalization, and expressive power of neural routing policies. Representative advances include transferable local policies for improving cross-scale generalization \cite{gao2023towards}, heterogeneous attention mechanisms for richer feature extraction \cite{wang2024deep}, lightweight cross-attention architectures for large-scale routing \cite{luo2025boosting}, and edge-aware Transformers that explicitly exploit pairwise customer relationships \cite{meng2025eformer}. These methods have significantly strengthened neural routing performance by improving representation learning and attention mechanisms. Nevertheless, routing decisions are still typically generated through a single compatibility function between vehicle and customer representations, implicitly coupling local feasibility, fleet coordination, and long-term routing considerations into a single decision score.
+Deep Reinforcement Learning (DRL) has emerged as a competitive paradigm for neural combinatorial optimization in VRPs \cite{nazari2018reinforcement}. Early studies employed recurrent encoder--decoder architectures trained with policy gradients to learn routing heuristics directly from data \cite{nazari2018reinforcement}. Subsequently, attention-based models replaced recurrent networks with Transformer architectures, substantially improving representation learning and solution quality across a wide range of VRP variants \cite{kool2019attention}. More recent research has focused on enhancing the scalability, generalization, and expressive power of neural routing policies. Representative advances include transferable local policies for improving cross-scale generalization \cite{gao2023towards}, heterogeneous attention mechanisms for richer feature extraction \cite{wang2024deep}, lightweight cross-attention architectures for large-scale routing \cite{luo2025boosting}, and edge-aware Transformers that explicitly exploit pairwise customer relationships \cite{meng2025eformer}. These methods have significantly strengthened neural routing performance by improving representation learning and attention mechanisms. Nevertheless, routing decisions are still typically generated through a single compatibility function between vehicle and customer representations, implicitly coupling local feasibility, fleet coordination, and long-term routing considerations into a single decision score.
 
-For DVRP, reinforcement learning has become an attractive alternative to repeatedly solving optimization models online. Existing studies formulate DVRPs as Markov decision processes and learn dispatching policies using value-based or actor--critic reinforcement learning \cite{akkerman2025comparison,konovalenko2024optimizing}. Recent work has further investigated richer state representations, graph neural networks, and Transformer-based architectures to better capture dynamic customer arrivals and evolving routing states \cite{konovalenko2024optimizing,li2024cada,meng2025eformer}. Although these advances improve policy quality and generalization, routing decisions are still primarily driven by a unified compatibility score, making it difficult to explicitly distinguish immediate feasibility from the long-term consequences of selecting a particular customer.
+For DVRP, reinforcement learning has become an attractive alternative to repeatedly solving optimization models online. Existing studies formulate DVRPs as Markov decision processes and learn dispatching policies using value-based or actor--critic reinforcement learning \cite{akkerman2025comparison,konovalenko2024optimizing}. Recent work has incorporated evolving request information into dynamic routing policies \cite{konovalenko2024optimizing,bono2021mardam}, while graph and edge-aware encoders improve structured routing representations \cite{meng2025eformer}. Although these advances improve policy quality and generalization, routing decisions are still primarily driven by a unified compatibility score, making it difficult to explicitly distinguish immediate eligibility from the long-term consequences of selecting a particular customer.
 
-Another fundamental challenge is coordinating multiple vehicles in dynamic environments. Existing approaches typically rely on centralized training, explicit inter-vehicle communication, or multi-agent reinforcement learning to coordinate vehicle behaviors \cite{zhang2020multi,shahbazian2025knowledge,xia2025multi}. While these strategies improve cooperation, they generally require repeatedly modeling the entire fleet during decision making, leading to increased computational complexity and reduced scalability. Furthermore, most actor--critic methods estimate only a state-value function for variance reduction. Since the critic is independent of the selected action, it provides identical guidance for all candidate customers within the same state, limiting its ability to evaluate the downstream routing impact of individual actions and making learned policies more susceptible to myopic decisions.
+Another fundamental challenge is coordinating multiple vehicles in dynamic environments. Multi-agent routing policies address this through sequential decisions, shared attention, or learned coordination mechanisms \cite{bono2021mardam,zhang2020multi,shahbazian2025knowledge}. These approaches motivate scalable representations of fleet interaction. Furthermore, most actor--critic methods estimate a state value only for variance reduction. Since that value is independent of the selected action, it provides identical guidance for all candidate customers within the same state and cannot explicitly evaluate their different downstream routing consequences.
 
 Taken together, existing learning-based routing policies exhibit three important limitations: (i) local feasibility, fleet coordination, and long-term planning are entangled within a single compatibility score; (ii) effective vehicle coordination often relies on computationally expensive fleet-level interaction; and (iii) state-value critics provide action-independent guidance that cannot explicitly assess the long-term impact of individual routing decisions. To address these limitations, we propose COAST, which decomposes customer selection into three complementary signals: an edge-aware compatibility module for local feasibility, a memory-based ownership mechanism for implicit fleet coordination, and a candidate-conditioned lookahead estimator for evaluating downstream routing consequences. These signals are adaptively fused into a unified routing policy trained end-to-end using reinforcement learning.
 \section{Problem Statement}
 \label{sec:prob}
 
-\subsection{Problem Setting}
-\label{sec:prob_setting}
-
-A DVRPTW instance consists of a depot (node $0$) and a set of customer requests
-$\mathcal{C}=\{1,\ldots,L_c\}$. Each customer request $j$ is represented by
+\paragraph{Dynamic DVRPTW.}
+A problem instance contains depot $0$ and customer requests $\mathcal C=\{1,\ldots,L_c\}$. Each request $j$ has normalized position $\mathbf p_j$, demand $q_j$, time window $[e_j,l_j]$, service duration $\sigma_j$, and reveal time $\rho_j$:
 \[
-\mathbf{x}_j=(x_j,y_j,q_j,e_j,l_j,s_j),
+\mathbf x_j=(\mathbf p_j,q_j,e_j,l_j,\sigma_j,\rho_j).
 \]
-where $(x_j,y_j)$ denotes the normalized location, $q_j$ is the normalized demand,
-$[e_j,l_j]$ is the service time window, and $s_j$ is the service duration.
-
-At decision step $t$, vehicle $k$ is described by
+At decision event $t$, the active vehicle $k_t$ is available at physical time $\eta_t=t^{\mathrm{cur}}_{k_t}$. Thus the policy observes only the revealed and unserved requests
 \[
-\mathbf{s}_k^t=(x_k,y_k,q_k^{rem},t_k^{cur}),
+\mathcal C_t=\{j\in\mathcal C:\rho_j\leq\eta_t\},\qquad
+\mathcal U_t=\mathcal C_t\setminus\mathcal S_t,
 \]
-where $(x_k,y_k)$ is the current position, $q_k^{rem}$ is the remaining capacity,
-and $t_k^{cur}$ is the next available time.
-
-For assigning vehicle $k$ to customer $j$, the travel distance, travel time,
-arrival time, and tardiness are computed as
-\begin{align}
-d_{kj} &= \|(x_k,y_k)-(x_j,y_j)\|_2,\\
-\tau_{kj} &= d_{kj}/v,\\
-t^{arr}_{kj} &= t_k^{cur}+\tau_{kj},\\
-\ell_{kj} &= \max(0,t^{arr}_{kj}-l_j).
-\end{align}
-
-Following~\cite{TAM2026114234}, we adopt soft time windows, allowing late arrivals
-while penalizing tardiness in the objective. A customer is feasible whenever
-$q_j\le q_k^{rem}$.
-
-Unlike the static VRPTW, customer requests are revealed progressively during route
-execution. Initially only $\mathcal{C}_0$ is observable, while additional batches
-$\mathcal{C}_{e_1},\mathcal{C}_{e_2},\ldots$ arrive over time. Let
-\[
-\mathcal{C}_t=\bigcup_{e_i\le t}\mathcal{C}_{e_i}
-\]
-denote the set of currently revealed requests. The degree of dynamism (DoD)
-measures the proportion of dynamically arriving customers. Consequently, routing
-decisions must balance serving current requests while preserving sufficient
-capacity and time for future arrivals.
-
-\subsection{Sequential Multi-Agent Decision Process}
-\label{sec:prob_mdp}
-
-Following~\cite{TAM2026114234}, we formulate DVRPTW as a Sequential Multi-Agent
-Decision Process (sMDDP), defined by
-\[
-(\mathcal I,\mathcal S,\mathcal A,P,P_0,R,T),
-\]
-where $\mathcal I=\{1,\ldots,L_v\}$ is the homogeneous vehicle set.
-
-Instead of selecting joint actions for all vehicles simultaneously, only the
-vehicle that becomes available first makes a decision at each step. Let
-$\iota_t\in\mathcal I$ denote this active vehicle.
-
-The global state is
-\[
-s_t=(\{\mathbf{s}_k^t\}_{k\in\mathcal I},\,s_t^E,\,\iota_t),
-\]
-where $s_t^E$ stores the status of all revealed customers.
-
-At decision step $t$, the action is
-\[
-a_t=j,\qquad
-j\in\mathcal A(s_t,\iota_t),
-\]
-where $\mathcal A(s_t,\iota_t)$ contains all revealed and unserved customers
-satisfying the capacity constraint together with the depot action.
-
-The transition function
-\[
-P(s_{t+1}\mid s_t,a_t)
-\]
-updates the active vehicle state, remaining capacity, customer status, newly
-revealed requests, and selects the next active vehicle according to the earliest
-available time.
-
-All vehicles share a common policy
-\[
-\pi_\theta(a_t\mid s_t,\iota_t),
-\]
-allowing routing knowledge to generalize across the fleet while naturally
-supporting different fleet sizes during inference.
-
-\subsection{Objective}
-\label{sec:prob_obj}
-
-The routing objective jointly minimizes travel distance, service tardiness, and
-the number of unserved customers.
-
-For serving customer $a_t$, the immediate reward is
-\[
-r_t
-=
--d_{\iota_t,a_t}
--
-\lambda_{late}\ell_{\iota_t,a_t},
-\]
-while the terminal penalty is
-\[
-r_T^{skip}
-=
--\lambda_{skip}N_{skip},
-\]
-where $N_{skip}$ denotes the number of revealed but unserved customers.
-
-The cumulative return is
+where $\mathcal S_t$ is the served set. Vehicle $k$ has state $\mathbf s_k^t=(\mathbf p_k^t,q_k^{\mathrm{rem}},t_k^{\mathrm{cur}})$, and $s_t$ denotes the policy-visible event state comprising the fleet, revealed-request status, and active vehicle. For candidate $j$, let
 \[
 \begin{aligned}
-R
-&= \sum_{t=0}^{T-1}r_t+r_T^{skip} \\
-&= -\sum_t d_{\iota_t,a_t}
-   -\lambda_{late}\sum_t\ell_{\iota_t,a_t}
-   -\lambda_{skip}N_{skip}.
+d_{k_tj}&=\|\mathbf p_{k_t}^t-\mathbf p_j\|_2,\\
+b_{k_tj}&=\max\!\left(t_{k_t}^{\mathrm{cur}}+d_{k_tj}/v,e_j\right),\\
+\ell_{k_tj}&=[b_{k_tj}-l_j]_+ .
 \end{aligned}
 \]
+Here $b_{k_tj}$ is service-start time, including any wait before $e_j$. We use soft time windows: late service is penalized, rather than masked, as in multi-vehicle soft-window routing \cite{zhang2020multi,bono2021mardam}.
 
-The training objective is
+\paragraph{Event-driven sequential process.}
+Following the event-driven sequential Multi-agent Markov Decision Process (sMMDP) construction of \citet{bono2021mardam}, only one homogeneous vehicle acts at each event. With $\mathcal D_t$ denoting completed vehicles,
 \[
-\max_\theta \mathbb{E}_{\pi_\theta}[R].
+\begin{aligned}
+k_t&=\arg\min_{k\notin\mathcal D_t}t_k^{\mathrm{cur}},\\
+\mathcal A_t&\equiv\mathcal A(s_t,k_t)=\{0\}\cup
+\{j\in\mathcal U_t:q_j\leq q_{k_t}^{\mathrm{rem}}\}.
+\end{aligned}
 \]
+The depot is always eligible. The mask excludes unrevealed, served, capacity-ineligible, and completed-vehicle actions; it does not exclude late customers. After $a_t$, the environment updates travel, waiting, service, capacity, customer status, newly visible requests, and the next earliest-available vehicle. If the depot is selected while requests remain hidden, the simulator advances to the next reveal event instead of terminating.
 
-This formulation highlights three key challenges: (i) dynamic customer arrivals
-lead to a non-stationary decision process; (ii) routing decisions of different
-vehicles are sequentially coupled through shared customers; and (iii) routing
-feasibility depends on the interaction between vehicle states and customer
-attributes. These challenges directly motivate the edge-aware compatibility,
-ownership coordination, and candidate-conditioned lookahead mechanisms proposed
-in the next section.
+\paragraph{Objective.}
+The shared policy $\pi_\theta(a_t\mid s_t,k_t)$ minimizes a shaped cost comprising travel distance, tardiness, and pending requests:
+\[
+J(\pi_\theta)=\mathbb E_{\pi_\theta}\!\left[
+\sum_t\!\left(d_{k_t,a_t}+\lambda_{\mathrm{late}}\ell_{k_t,a_t}
++\zeta_t\lambda_{\mathrm{pend}}N_t\right)\right].
+\]
+where $\zeta_t$ indicates that the base routing transition marks the fleet complete and $N_t$ is its number of unserved requests. This wording avoids treating the penalty as terminal-only when a hidden request can reactivate a vehicle.
+Figure~\ref{fig:coast_overview} instantiates this event-driven state, eligible-action set, and transition with COAST's representations and decision signals.
 
 \section{Methodology}\label{sec:method}
 
-This section presents the COAST architecture and its training procedure.
-Table~\ref{tab:notation} summarizes the main notation.
+COAST converts the policy-visible state into three complementary candidate scores: local edge-aware compatibility, fleet-relative ownership, and candidate-conditioned lookahead.
 
-\subsection{Policy Overview}\label{sec:policy_overview}
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/COAST_final.drawio.png}
+\caption{COAST at decision event $t$. The observed routing state supplies the depot and revealed requests $\mathcal C_t$, fleet state, and eligible-action mask $\mathcal A_t$; gray nodes illustrate requests that remain unrevealed and are not policy candidates. Green/red actions denote eligible/masked candidates. The left-to-right vectors in the decision-signal panel are compatibility $\mathbf S_t^{\mathrm{att}}$, lookahead $\mathbf S_t^{\mathrm{look}}$, and ownership $\mathbf S_t^{\mathrm{owner}}$; they are fused over eligible actions. The ownership head converts fleet-wide bilinear vehicle--customer logits into a softmax over vehicles, and masked action selection updates the environment and only the acting vehicle's memory slot for the next event.}
+\label{fig:coast_overview}
+\end{figure*}
 
-Existing neural routing policies typically produce a selection score through a single compatibility function between vehicle and customer representations~\cite{kool2019attention}, which conflates immediate feasibility assessment with fleet-level coordination and future planning.
-When these signals interfere, the policy gradient receives mixed learning signals that slow convergence and limit generalization under distribution shifts.
+\subsection{Dynamic representations and local compatibility}
 
-COAST instead decomposes the customer-selection score into three independently computed signals combined by a learned fusion mechanism.
-At each step $t$, given state $s_t$ and active vehicle $k_t$, the policy is:
-\[
-\pi_\theta(a_t \mid s_t, k_t)
-=
-\frac{\exp\!\big(S_\theta(a_t \mid s_t, k_t)\big)}
-{\displaystyle\sum_{u \in \mathcal{A}(s_t, k_t)} \exp\!\big(S_\theta(u \mid s_t, k_t)\big)},
-\]
-where $\mathcal{A}(s_t, k_t)$ is the feasible action set and the composite score is:
-\[
-S_\theta(j \mid s_t, k_t) = \phi_{fuse}\!\left(\tilde{S}^{att}_j,\; \tilde{S}^{owner}_j,\; \tilde{S}^{look}_j\right).
-\]
-The three signals are:
-\begin{itemize}
-    \item $S^{att}$: a \textit{local compatibility score} quantifying vehicle--customer fit given current spatial, temporal, and capacity constraints;
-    \item $S^{owner}$: a \textit{coordination bias} derived from per-vehicle memory, encoding implicit fleet-level assignment of customer $j$ to vehicle $k_t$;
-    \item $S^{look}$: a \textit{candidate-conditioned lookahead estimate} of the downstream routing consequence of committing to customer $j$.
-\end{itemize}
+The GraphEncoder produces distance-aware contextual customer embeddings $H_t^{\mathrm{cust}}=\{\mathbf c_{t,j}\}$; in the policy forward path, it is recomputed only when newly revealed requests change $\mathcal C_t$. At every event, the ActiveVehicleEncoder cross-attends from $\mathbf s_{k_t}^t$ to these embeddings to obtain $\mathbf h_t^{\mathrm{act}}$. For each active-vehicle--candidate pair, EdgeFeatureEncoder maps the eight dynamic features---distance, travel time, arrival, waiting, lateness, slack, eligibility, and capacity gap---to $\mathbf e_{t,k_t,j}^{\mathrm{emb}}$, collected in $H_t^{\mathrm{edge}}$.
 
-\subsection{Model Architecture}\label{sec:model_architecture}
-
-\paragraph{Customer graph encoding.}
-We encode customers using a Transformer-based graph encoder~\cite{vaswani2017attention} that produces contextual embeddings capturing inter-customer relational structure.
-Depot and customer nodes use separate linear projections since they play structurally different roles:
-\[
-\mathbf{h}_j^{(0)} =
-\begin{cases}
-\mathbf{W}_{dep}\,\mathbf{x}_j, & j = 0 \\
-\mathbf{W}_{cust}\,\mathbf{x}_j, & j \geq 1
-\end{cases}
-\]
-where $\mathbf{x}_j \in \mathbb{R}^{D_c}$ is the raw feature vector.
-Since geographic proximity is a strong signal for routing quality but may not emerge reliably from content-based attention alone, we augment each attention layer with a distance-aware bias: a 16-bin RBF encoding of normalized pairwise distance $d_{ij} \in [0,1]$,
-\[
-\mathrm{RBF}_k(d) = \exp\!\left(-\frac{(d - \mu_k)^2}{2\sigma^2}\right),
-\]
-with 16 evenly-spaced centres $\mu_k = (k-1)/15$, $k=1,\ldots,16$, and bandwidth $\sigma = 1/15$.
-The 16-dimensional encoding is projected by an MLP to a per-head scalar bias $b_{ij}^{(l,h)}$ added to the attention logit.
-Each layer applies two post-norm residual sublayers~\cite{vaswani2017attention}.
-Letting $\mathrm{MHA}_i^{(l)} = \mathbf{W}_{out}^{(l)}\!\left[\bigoplus_{h=1}^{H}\sum_j \alpha_{ij}^{(l,h)}\mathbf{v}_j^{(l,h)}\right]$ denote the multi-head attention output:
-\begin{align*}
-\hat{\mathbf{h}}_i^{(l)} &= \mathrm{LN}\!\left(\mathbf{h}_i^{(l)} + \mathrm{MHA}_i^{(l)}\right), \\
-\mathbf{h}_i^{(l+1)} &= \mathrm{LN}\!\left(\hat{\mathbf{h}}_i^{(l)} + \mathrm{FFN}\!\left(\hat{\mathbf{h}}_i^{(l)}\right)\right).
-\end{align*}
-The final customer representation is $\mathbf{c}_j = \mathrm{Dropout}(\mathbf{W}_c\,\mathbf{h}_j^{(L)}) \in \mathbb{R}^D$.
-In the dynamic setting, encodings are recomputed whenever new orders become visible.
-
-\paragraph{Acting vehicle encoding.}
-Only the active vehicle $k_t$ is encoded at each step --- full fleet re-encoding at every step is wasteful and unnecessary since inter-vehicle coordination is handled by CoordinationMemory rather than vehicle-to-vehicle attention.
-The vehicle state $\mathbf{s}_{k_t} = (x, y, q^{rem}, t^{cur}) \in \mathbb{R}^4$ is projected and refined through $L$ layers of cross-attention over $H^{cust}$, restricted to the feasible action set:
-\[
-h^{act} = \mathbf{W}_v\;\mathrm{FleetEncoder}\!\bigl(\mathbf{W}_{in}\,\mathbf{s}_{k_t},\; H^{cust},\; \mathcal{A}(s_t,k_t)\bigr),
-\]
-where $h^{act} \in \mathbb{R}^{N \times 1 \times D}$.
-
-\paragraph{Edge feature encoding}
-Node-level representations capture global structure but cannot express the state-dependent interaction between a specific vehicle and a specific candidate at this step.
-Two customers equidistant from the vehicle may differ radically in time-window compatibility, waiting time, or remaining capacity fit.
-We therefore construct an 8-dimensional edge feature vector $\mathbf{e}_{ij} \in \mathbb{R}^8$ for each (vehicle $k_t$, candidate $j$) pair:
-
-\medskip
-\begin{center}
-\begin{tabular}{@{} l l p{1.65in} @{}}
-\toprule
-Feature & Symbol & Definition \\
-\midrule
-Distance       & $d_{ij}$    & $\|\mathbf{p}_{k_t} - \mathbf{p}_j\|_2$ \\
-Travel time    & $\tau_{ij}$ & $d_{ij} / v$ \\
-Arrival time   & $a_{ij}$    & $t^{cur}_{k_t} + \tau_{ij}$ \\
-Waiting time   & $w_{ij}$    & $\max(tw^{start}_j - a_{ij},\,0)$ \\
-Lateness       & $l_{ij}$    & $\max(a_{ij} - tw^{end}_j,\,0)$ \\
-Time slack     & $s_{ij}$    & $tw^{end}_j - a_{ij}$ \\
-Feasibility    & $f_{ij}$    & 1 if $j$ is capacity- and time-feasible, else 0 \\
-Capacity gap   & $g_{ij}$    & $q^{rem}_{k_t} - d(j)$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-\medskip
-
-Together these features encode whether the vehicle arrives on time, how much schedule slack remains, and whether capacity is sufficient --- information that changes at every step as the vehicle's state evolves.
-The features are encoded through a two-layer MLP with layer normalization:
-\[
-\mathbf{e}_{ij}^{emb} = \mathrm{LN}\!\left(\mathbf{W}_{e2}\,\mathrm{ReLU}\!\left(\mathbf{W}_{e1}\,\mathbf{e}_{ij}\right)\right) \in \mathbb{R}^D,
-\]
-yielding the full edge tensor $H^{edge} \in \mathbb{R}^{N \times 1 \times L_c \times D}$.
-
-\paragraph{Local compatibility via edge-aware scoring.}
-Standard attention scoring~\cite{kool2019attention} computes vehicle--customer compatibility from node-level representations that are oblivious to the specific interaction at this step.
-The CrossEdgeFusion module injects the per-pair edge embedding as an additive bias into multi-head attention logits:
-\[
-u_j^{(h)} = \frac{\mathbf{q}^{(h)} \cdot \mathbf{k}_j^{(h)}}{\sqrt{d_h}} + \mathbf{e}_j^{emb} \cdot \mathbf{w}_{bias}^{(h)},
-\]
-where $\mathbf{q}^{(h)} = h^{act}\mathbf{W}_Q^{(h)}$ and $\mathbf{k}_j^{(h)} = \mathbf{c}_j\mathbf{W}_K^{(h)}$.
-The compatibility score averages the pre-softmax logits across heads:
-\[
-S^{att}_j = \frac{1}{H}\sum_{h=1}^{H} u_j^{(h)} \in \mathbb{R}^{N \times 1 \times L_c}.
-\]
-No softmax is applied inside CrossEdgeFusion; the single softmax over all candidates is deferred to the final action selection stage after all three signals are fused, ensuring that inter-candidate probability mass is distributed over the most informative composite signal.
-
-\paragraph{Coordination through memory and ownership.}
-Without a coordination mechanism, the policy may route multiple vehicles toward the same customer clusters while neglecting others.
-Explicit fleet-level communication at every step is computationally heavy and unnecessary when softer implicit signals suffice.
-
-We instead equip each vehicle with a private latent memory $\mathbf{m}_k^{(t)} \in \mathbb{R}^{H_m}$, initialized to zero, that summarizes its routing history.
-After vehicle $k_t$ selects customer $j^*$, its memory is updated via a bounded, GRU-like recurrence:
-\[
-\mathbf{m}_{k_t}^{(t+1)} = \tanh\!\left(\mathbf{W}_{in}\!\left[\,h^{act},\;\mathbf{c}_{j^*},\;\mathbf{e}_{k_t j^*}^{emb}\,\right] + \mathbf{W}_{hid}\,\mathbf{m}_{k_t}^{(t)}\right).
-\]
-Only the acting vehicle's memory slot is updated; all others remain unchanged.
-
-This per-vehicle memory supports an OwnershipHead that computes a soft fleet-level customer assignment.
-A vehicle whose memory is strongly aligned with customer $j$ has implicitly claimed it through prior routing choices.
-The assignment logits are computed via a bilinear interaction over all vehicles:
-\[
-o_{ik} = \frac{(\mathbf{W}_{veh}\,\mathbf{m}_i^{(t)}) \cdot (\mathbf{W}_{cust}\,\mathbf{c}_k)^\top}{\sqrt{D}},
-\]
-and the coordination bias for vehicle $k_t$ is the log-relative ownership over the fleet:
+CrossEdgeFusion forms the local compatibility score by adding an edge-dependent bias to each attention head:
 \[
 \begin{aligned}
-S^{owner}_j
-&= \log\!\left(\frac{\exp(o_{k_t,j})}{\sum_{i'=1}^{L_v}\exp(o_{i',j})}\right), \\
-S^{owner} &\in \mathbb{R}^{N \times 1 \times L_c}.
+S_{t,j}^{\mathrm{att}}
+&=\frac{1}{H}\sum_{h=1}^{H}\left[
+\frac{(\mathbf h_t^{\mathrm{act}}W_Q^h)(\mathbf c_{t,j}W_K^h)^\top}{\sqrt{d_h}}\right.\\[-2pt]
+&\hspace{48pt}\left.+(\mathbf w_b^h)^\top\mathbf e_{t,k_t,j}^{\mathrm{emb}}\right].
 \end{aligned}
 \]
-Using log-probability ensures the ownership signal is well-scaled relative to the other scores, and the softmax across vehicles encodes \textit{relative} claim --- a high $S^{owner}_j$ means vehicle $k_t$ is the strongest claimant among all vehicles.
-Neither the OwnershipHead nor the memory update imposes any auxiliary supervised loss; both are shaped entirely by the policy gradient, allowing coordination semantics to emerge from optimizing routing performance.
+This score captures the immediate vehicle--customer fit without applying a candidate softmax prematurely.
 
-\paragraph{Candidate-conditioned lookahead estimation.}
-A policy that maximizes immediate feasibility may still be myopic: selecting a nearby customer can leave the vehicle in a position that violates time windows of unserved neighbors, or forces an early depot return due to capacity exhaustion.
-A global state value $V(s_t)$ cannot differentiate between candidates and therefore offers no guidance at the action level.
+\subsection{Ownership and anticipatory signals}
 
-The LookaheadHead produces a per-candidate scalar that estimates the downstream routing consequence of committing to customer $j$:
+COAST maintains a memory tensor $M_t$ with one slot per vehicle. After selecting $j^*$, only the acting slot changes:
 \[
-S^{look}_j = \mathbf{W}_{\ell 2}\;\mathrm{Dropout}\!\bigl(\mathrm{ReLU}\bigl(\mathbf{W}_{\ell 1}
-\bigl[\,h^{act},\;\mathbf{c}_j,\;\mathbf{e}_{ij}^{emb}\,\bigr]\bigr)\bigr),
+\begin{aligned}
+M_{t+1}[k_t]&=\tanh\!\left(W_{\mathrm{in}}[\mathbf h_t^{\mathrm{act}},\mathbf c_{t,j^*},
+\mathbf e_{t,k_t,j^*}^{\mathrm{emb}}]\right.\\[-2pt]
+&\hspace{38pt}\left.+W_{\mathrm{hid}}M_t[k_t]\right),\\
+M_{t+1}[i]&=M_t[i]\quad(i\ne k_t).
+\end{aligned}
 \]
-producing a per-candidate scalar ($S^{look}_j \in \mathbb{R}$) conditioned on the vehicle's current state, the candidate's global embedding, and their dynamic interaction.
-Critically, this head carries no explicit regression target --- $S^{look}$ is shaped entirely through the policy gradient, which drives the fusion MLP to weight lookahead appropriately when it reduces long-term routing cost.
-
-\paragraph{Multi-signal score fusion.}
-The three signals are computed by different mechanisms and operate on incompatible numerical scales.
-To normalize them before fusion, we apply mask-aware z-normalization over the feasible candidates for each signal independently.
-For each $j \in \mathcal{A}(s_t, k_t)$:
+The OwnershipHead computes bilinear vehicle--customer logits and turns them into the active vehicle's relative claim:
 \[
-\tilde{S}^{(\cdot)}_j = \frac{S^{(\cdot)}_j - \mu^{(\cdot)}}{\sqrt{(\sigma^{(\cdot)})^2 + \varepsilon}},
+\begin{aligned}
+o_{t,i,j}&=\frac{(W_{\mathrm{veh}}M_t[i])^\top(W_{\mathrm{cust}}\mathbf c_{t,j})}{\sqrt D},\\
+S_{t,j}^{\mathrm{owner}}&=
+\left.\log\operatorname{softmax}_{i\in\mathcal I}(o_{t,i,j})\right|_{i=k_t}.
+\end{aligned}
 \]
-where $\mu^{(\cdot)}$ and $\sigma^{(\cdot)}$ are the mean and standard deviation computed \emph{only} over feasible candidates; scores for infeasible positions are subsequently set to $-\infty$ before the final softmax.
-
-The normalized signals are fused by a compact two-layer MLP:
+Thus ownership is a learned coordination bias across vehicles, not explicit vehicle-to-vehicle message passing. In parallel, the LookaheadHead produces a learned candidate-conditioned signal,
 \[
-S^{final}_j = \mathbf{W}_{f2}\;\mathrm{ReLU}\!\left(\mathbf{W}_{f1}\!\left[\,\tilde{S}^{att}_j,\;\tilde{S}^{owner}_j,\;\tilde{S}^{look}_j\,\right]\right),
+S_{t,j}^{\mathrm{look}}=\operatorname{MLP}_{\mathrm{look}}
+([\mathbf h_t^{\mathrm{act}},\mathbf c_{t,j},\mathbf e_{t,k_t,j}^{\mathrm{emb}}]),
 \]
-with $\mathbf{W}_{f1} \in \mathbb{R}^{64 \times 3}$ and $\mathbf{W}_{f2} \in \mathbb{R}^{1 \times 64}$.
-A fixed-weight sum cannot adapt to the fact that ownership is uninformative early in an episode but becomes the dominant coordination cue later; the MLP learns these context-dependent interaction weights through the policy gradient.
-An optional tanh scaling bounds the magnitude: $S^{final}_j \leftarrow \beta_0 \cdot \tanh(S^{final}_j)$.
+which is optimized end-to-end and is not a calibrated value or $Q$-function.
 
-\subsection{Training Objective}\label{sec:training_objective}
+\subsection{Adaptive fusion and learning}
 
-COAST is trained end-to-end using REINFORCE~\cite{nazari2018reinforcement} with a learned critic baseline.
-The critic $b_\phi$ and the LookaheadHead play strictly separate roles: $b_\phi$ is a state-level variance-reducing baseline that is agnostic to the action chosen, while $S^{look}$ is an action-conditioned routing guide.
-Conflating them would couple value estimation with the scoring mechanism, degrading both.
-
-\paragraph{Policy gradient with critic baseline.}
-The policy loss is:
+Let $\mathcal R=\{\mathrm{att},\mathrm{look},\mathrm{owner}\}$ denote the three signals in the left-to-right order of Figure~\ref{fig:coast_overview}. COAST normalizes each $S_{t,j}^{r}$, for $r\in\mathcal R$, only over $j\in\mathcal A_t$, then fuses the resulting three-vector with an MLP:
 \[
-\mathcal{L}_{policy}(\theta)
-=
--\mathbb{E}_{\tau \sim \pi_\theta}\!\left[\sum_{t=0}^{T} \log \pi_\theta(a_t \mid s_t, k_t)\, A_t \right],
+\begin{aligned}
+\widetilde S_{t,j}^{r}&=\frac{S_{t,j}^{r}-\mu_t^{r}}
+{\sqrt{(\sigma_t^{r})^2+\varepsilon}},\qquad r\in\mathcal R,\\
+\mathbf z_{t,j}&=[\widetilde S_{t,j}^{\mathrm{att}},
+\widetilde S_{t,j}^{\mathrm{look}},\widetilde S_{t,j}^{\mathrm{owner}}],\\
+S_{t,j}^{\mathrm{final}}&=\phi_{\mathrm{fuse}}(\mathbf z_{t,j}).
+\end{aligned}
 \]
-where $A_t = R_t - b_\phi(s_t)$ is the advantage, $R_t = \sum_{k=t}^T r_k$ is the cumulative return, and the critic is trained with:
+The illustrated vectors are $\mathbf S_t^{\mathrm{att}}=(S_{t,j}^{\mathrm{att}})_{j\in\mathcal A_t}$, $\mathbf S_t^{\mathrm{look}}=(S_{t,j}^{\mathrm{look}})_{j\in\mathcal A_t}$, and $\mathbf S_t^{\mathrm{owner}}=(S_{t,j}^{\mathrm{owner}})_{j\in\mathcal A_t}$. The masked policy is
 \[
-\mathcal{L}_{critic}(\phi)
-=
-\mathbb{E}\!\left[\sum_{t=0}^{T} \mathrm{SmoothL1}\!\left(b_\phi(s_t),\; R_t\right)\right].
+\pi_\theta(j\mid s_t,k_t)=
+\frac{\exp(S_{t,j}^{\mathrm{final}})}
+{\sum_{u\in\mathcal A_t}\exp(S_{t,u}^{\mathrm{final}})},\qquad j\in\mathcal A_t.
 \]
-Smooth-L1 is used for robustness to the return variance induced by stochastic customer arrivals.
-Advantage estimates are batch-normalized before computing $\mathcal{L}_{policy}$.
-
-\paragraph{Combined objective.}
-We augment with an entropy term to prevent premature convergence across the diverse instance distribution:
-\begin{align*}
-\mathcal{L}(\theta, \phi)
-&= \mathcal{L}_{policy}(\theta)
-+ \alpha\; \mathcal{L}_{critic}(\phi) \\
-&\quad -\,\beta\;\mathbb{E}\!\left[\sum_{t=0}^{T}
-  \mathcal{H}\!\left(\pi_\theta(\cdot \mid s_t, k_t)\right)\right],
-\end{align*}
-with $\beta = 0.01$.
-The LookaheadHead and OwnershipHead carry no auxiliary losses; both receive gradient signal exclusively through $S^{final}$ via the policy gradient.
-
-\subsection{Discussion}\label{sec:method_discussion}
-
-The design of COAST reflects three structural inductive biases aligned with dynamic multi-vehicle routing.
-
-\textit{Edge features as first-class routing context.}
-Static node embeddings encode global relational structure but cannot express how vehicle state and customer constraints interact at a given step.
-The explicit construction of per-pair edge features --- encoding time slack, lateness, capacity gap, and feasibility --- allows the scoring mechanism to react immediately to changes in vehicle state without waiting for global re-encoding.
-This is the primary mechanism through which COAST achieves constraint-awareness at decision time.
-
-\textit{Communication-free fleet coordination via emergent ownership.}
-Explicit inter-vehicle communication or full fleet re-encoding at every step adds overhead proportional to fleet size and introduces gradient coupling between vehicles.
-The per-vehicle memory and OwnershipHead provide a scalable alternative: coordination emerges implicitly from each vehicle's trajectory history, naturally inducing spatial specialization without any vehicle-to-vehicle attention.
-The ownership signal is shaped purely by routing performance, not by any auxiliary supervision, so the coordination structure it encodes reflects what actually improves fleet efficiency.
-
-\textit{Action-conditioned lookahead without a supervised target.}
-The LookaheadHead differs from standard value-based approaches in that it produces per-candidate estimates without being constrained to approximate any specific quantity such as $Q(s_t, a_t)$.
-By training entirely through the policy gradient, the lookahead signal is free to encode whatever combination of vehicle state, candidate embedding, and edge interaction best reduces myopic decisions --- including routing consequences that are difficult to formalize analytically.
-Its separation from the critic baseline preserves the action-independence required for an unbiased gradient estimator while allowing the per-candidate signal to carry independent predictive content.
-
-\begin{table*}[t!]
-\centering
-{\small
-\setlength{\tabcolsep}{2pt}
-\begin{tabular}{p{0.57\textwidth}p{0.39\textwidth}}
-\toprule
-\textbf{Symbol} & \textbf{Description} \\
-\midrule
-
-\multicolumn{2}{l}{\textit{Decision process}} \\
-$t$                          & Decision step index \\
-$s_t$                        & Environment state at step $t$ \\
-$k_t$                        & Index of the active vehicle at step $t$ \\
-$a_t$                        & Selected customer (action) \\
-$\mathcal{A}(s_t, k_t)$      & Feasible action set for vehicle $k_t$ \\
-
-\midrule
-\multicolumn{2}{l}{\textit{Problem dimensions}} \\
-$N$   & Batch size \\
-$L_c$ & Number of customers including depot \\
-$L_v$ & Number of vehicles \\
-$D$   & Embedding dimension \\
-$H$   & Number of attention heads \\
-$H_m$ & Coordination memory hidden size \\
-$H_\ell$ & Lookahead MLP hidden size \\
-
-\midrule
-\multicolumn{2}{l}{\textit{Input features}} \\
-$\mathbf{x}_j \in \mathbb{R}^{D_c}$      & Raw feature vector of customer or depot $j$ \\
-$\mathbf{s}_{k_t} \in \mathbb{R}^4$       & State of active vehicle: $(x, y, q^{rem}, t^{cur})$ \\
-$\mathbf{e}_{ij} \in \mathbb{R}^8$        & Raw edge feature vector for pair (vehicle $k_t$, candidate $j$) \\
-
-\midrule
-\multicolumn{2}{l}{\textit{Learned representations}} \\
-$\mathbf{c}_j \in \mathbb{R}^D$,\; $H^{cust} \in \mathbb{R}^{N \times L_c \times D}$               & Customer embeddings from GraphEncoder \\
-$h^{act} \in \mathbb{R}^{N \times 1 \times D}$                                                       & Active vehicle embedding (one vehicle encoded per step) \\
-$\mathbf{e}_{ij}^{emb} \in \mathbb{R}^D$,\; $H^{edge} \in \mathbb{R}^{N \times 1 \times L_c \times D}$ & Encoded edge features \\
-
-\midrule
-\multicolumn{2}{l}{\textit{Scoring signals}} \\
-$S^{att}   \in \mathbb{R}^{N \times 1 \times L_c}$ & Local compatibility score (CrossEdgeFusion) \\
-$S^{owner} \in \mathbb{R}^{N \times 1 \times L_c}$ & Ownership coordination bias (log-probability) \\
-$S^{look}  \in \mathbb{R}^{N \times 1 \times L_c}$ & Candidate-conditioned lookahead estimate \\
-$S^{final} \in \mathbb{R}^{N \times 1 \times L_c}$ & Fused routing score \\
-$\tilde{S}^{(\cdot)}$                               & Z-normalized version of each signal \\
-
-\midrule
-\multicolumn{2}{l}{\textit{Coordination memory}} \\
-$\mathbf{m}_k^{(t)} \in \mathbb{R}^{H_m}$    & Memory state of vehicle $k$ at step $t$ \\
-$M_t \in \mathbb{R}^{N \times L_v \times H_m}$ & Full fleet memory tensor at step $t$ \\
-
-\midrule
-\multicolumn{2}{l}{\textit{Policy and learning}} \\
-$\pi_\theta(a_t \mid s_t, k_t)$  & Routing policy parameterized by $\theta$ \\
-$R_t$                            & Cumulative return from step $t$ \\
-$b_\phi(s_t) \in \mathbb{R}$     & Learned critic baseline (distinct from LookaheadHead) \\
-$A_t = R_t - b_\phi(s_t)$        & Advantage estimate \\
-$\alpha,\,\beta$                 & Critic weight and entropy coefficient \\
-\bottomrule
-\end{tabular}
-}
-\caption{Summary of main notation used in Section~\ref{sec:method}.}
-\label{tab:notation}
-\end{table*}
+Training samples from this distribution and optimizes REINFORCE with a learned critic baseline, advantage normalization, and entropy regularization; reported inference uses greedy $\arg\max$ decoding. The ownership and lookahead modules have no auxiliary targets and receive learning signal only through the policy objective.
 
 \section{Experimental results} \label{sec:experiment}
 
@@ -494,63 +204,37 @@ RQ1 keeps benchmark reporting and statistical inference distinct. On the Solomon
 
 \paragraph{Question.} Does the decision decomposition improve routing quality across spatial topologies, dispatching baselines, and increasing fleet scale?
 
-Tables~\ref{tab:rq1_solomon_neural} and \ref{tab:rq1_solomon_classical} split the complete Solomon-style benchmark into learned and classical comparators. This preserves all R, C, and RC topology evidence while keeping each comparison set readable in a single column.
+Table~\ref{tab:rq1_solomon} reports the complete Solomon-style benchmark across all eight methods, preserving R, C, and RC topology evidence in a single view.
 
-\begin{table}[t]
+\begin{table*}[t]
 \centering
-{\small
-\setlength{\tabcolsep}{2.4pt}
-\begin{tabular}{llrrrr}
+{\footnotesize
+\setlength{\tabcolsep}{1.35pt}
+\begin{tabular}{llrrrrrrrr}
 \toprule
-Scale & Top. & COAST & MARDAM & AM & Poly. \\
+Scale & Top. & COAST & MARDAM & AM & Poly. & GPHH & C+C & C+W & WIQ+C \\
 \midrule
-\texttt{h100} & C  & \textbf{67.65} & 65.08 & 73.01 & 70.36 \\
-               & R  & \textbf{57.22} & 60.03 & 66.08 & 63.97 \\
-               & RC & \textbf{65.69} & 67.42 & 73.07 & 70.31 \\
+\texttt{h100} & C  & \textbf{67.65} & 65.08 & 73.01 & 70.36 & 80.63 & 130.71 & 118.12 & 175.02 \\
+               & R  & \textbf{57.22} & 60.03 & 66.08 & 63.97 & 72.02 & 147.70 & 143.05 & 179.86 \\
+               & RC & \textbf{65.69} & 67.42 & 73.07 & 70.31 & 80.11 & 152.99 & 141.10 & 181.66 \\
 \addlinespace
-\texttt{h200} & C  & \textbf{117.61} & 162.43 & 126.64 & 137.04 \\
-               & R  & \textbf{104.24} & 142.69 & 124.00 & 125.65 \\
-               & RC & \textbf{105.19} & 143.48 & 125.66 & 130.48 \\
+\texttt{h200} & C  & \textbf{117.61} & 162.43 & 126.64 & 137.04 & 191.74 & 269.58 & 248.67 & 361.24 \\
+               & R  & \textbf{104.24} & 142.69 & 124.00 & 125.65 & 184.87 & 276.62 & 273.03 & 348.95 \\
+               & RC & \textbf{105.19} & 143.48 & 125.66 & 130.48 & 181.00 & 282.86 & 283.12 & 350.99 \\
 \addlinespace
-\texttt{h400} & C  & \textbf{220.65} & 323.84 & 248.35 & 258.78 \\
-               & R  & \textbf{201.98} & 314.44 & 243.97 & 238.60 \\
-               & RC & \textbf{203.26} & 322.73 & 250.32 & 244.98 \\
+\texttt{h400} & C  & \textbf{220.65} & 323.84 & 248.35 & 258.78 & 374.85 & 630.06 & 616.13 & 752.28 \\
+               & R  & \textbf{201.98} & 314.44 & 243.97 & 238.60 & 354.62 & 624.08 & 618.70 & 720.14 \\
+               & RC & \textbf{203.26} & 322.73 & 250.32 & 244.98 & 352.72 & 634.84 & 636.76 & 724.18 \\
 \bottomrule
 \end{tabular}
 }
-\caption{Solomon-style normalized routing cost: neural comparisons (lower is better). ``Poly.'' denotes PolyNet. COAST is best in 26/27 size--topology aggregates; MARDAM is lower only on \texttt{h100}-C.}
-\label{tab:rq1_solomon_neural}
-\end{table}
+\caption{Solomon-style normalized routing cost across all eight compared methods (lower is better). ``Poly.'' denotes PolyNet. COAST is best in 26/27 size--topology aggregates; MARDAM is lower only on \texttt{h100}-C. COAST beats GPHH on 172/176 instances and each dispatching rule on all 176.}
+\label{tab:rq1_solomon}
+\end{table*}
 
-\begin{table}[t]
-\centering
-{\small
-\setlength{\tabcolsep}{2.0pt}
-\begin{tabular}{llrrrrr}
-\toprule
-Scale & Top. & COAST & GPHH & C+C & C+W & WIQ+C \\
-\midrule
-\texttt{h100} & C  & \textbf{67.65} & 80.63 & 130.71 & 118.12 & 175.02 \\
-               & R  & \textbf{57.22} & 72.02 & 147.70 & 143.05 & 179.86 \\
-               & RC & \textbf{65.69} & 80.11 & 152.99 & 141.10 & 181.66 \\
-\addlinespace
-\texttt{h200} & C  & \textbf{117.61} & 191.74 & 269.58 & 248.67 & 361.24 \\
-               & R  & \textbf{104.24} & 184.87 & 276.62 & 273.03 & 348.95 \\
-               & RC & \textbf{105.19} & 181.00 & 282.86 & 283.12 & 350.99 \\
-\addlinespace
-\texttt{h400} & C  & \textbf{220.65} & 374.85 & 630.06 & 616.13 & 752.28 \\
-               & R  & \textbf{201.98} & 354.62 & 624.08 & 618.70 & 720.14 \\
-               & RC & \textbf{203.26} & 352.72 & 634.84 & 636.76 & 724.18 \\
-\bottomrule
-\end{tabular}
-}
-\caption{Solomon-style normalized routing cost: GPHH and dispatching comparisons. COAST is lower-cost than GPHH on 172/176 instances and than each dispatching rule on all 176.}
-\label{tab:rq1_solomon_classical}
-\end{table}
+\paragraph{Solomon benchmark.} The Solomon table establishes three points. First, COAST is best in every \texttt{h200} and \texttt{h400} size--topology aggregate. Second, the small-scale exception is explicit rather than averaged away: at \texttt{h100}, MARDAM is 3.8\% lower on the compact C topology, while COAST still leads the \texttt{h100} aggregate and its R and RC subsets. Measured from the scale-level means, COAST's reduction over the best neural comparator is 1.9\%, 13.0\%, and 15.1\% at \texttt{h100}, \texttt{h200}, and \texttt{h400}, respectively.
 
-\paragraph{Solomon benchmark.} The two Solomon tables establish three points. First, COAST is best in every \texttt{h200} and \texttt{h400} size--topology aggregate. Second, the small-scale exception is explicit rather than averaged away: at \texttt{h100}, MARDAM is 3.8\% lower on the compact C topology, while COAST still leads the \texttt{h100} aggregate and its R and RC subsets. Measured from the scale-level means, COAST's reduction over the best neural comparator is 1.9\%, 13.0\%, and 15.1\% at \texttt{h100}, \texttt{h200}, and \texttt{h400}, respectively.
-
-Third, Table~\ref{tab:rq1_solomon_classical} places the neural comparison in a broader dispatching context. COAST beats GPHH on 172/176 individual instances and every dispatching rule on all 176. The separation is especially pronounced at \texttt{h400}: on R instances, COAST's 201.98 cost is below GPHH's 354.62 and the two savings-based rules' 624.08 and 618.70. Thus, the result is not limited to one learned comparator, while the neural table remains the more demanding comparison because its baselines are closer.
+Third, the same table places the neural comparison in a broader dispatching context. COAST beats GPHH on 172/176 individual instances and every dispatching rule on all 176. The separation is especially pronounced at \texttt{h400}: on R instances, COAST's 201.98 cost is below GPHH's 354.62 and the two savings-based rules' 624.08 and 618.70. Thus, the result is not limited to one learned comparator, while the neural baselines remain the more demanding comparison because they are much closer.
 
 \begin{table*}[t]
 \centering
@@ -578,7 +262,7 @@ RC & 56 & 89.3\% / 25.0\% & 94.6\% / 15.8\% & 92.9\% / 15.0\% \\
 \toprule
 PYTH scale & COAST & MARDAM & AM & PolyNet \\
 \midrule
-\texttt{n20m1}$^{\dagger}$ & \textbf{24.78} & 26.13 & 25.40 & 25.58 \\
+\texttt{n20m1} & \textbf{24.78} & 26.13 & 25.40 & 25.58 \\
 \texttt{n50m3}             & \textbf{43.92} & 46.48 & 49.58 & 49.93 \\
 \texttt{n100m5}            & \textbf{94.85} & 99.50 & 103.85 & 105.13 \\
 \texttt{n200m10}           & \textbf{182.38} & 203.24 & 196.53 & 200.89 \\
@@ -588,7 +272,7 @@ PYTH scale & COAST & MARDAM & AM & PolyNet \\
 }\\[1pt]
 \footnotesize (b) PYTH greedy-decoding results.
 \end{minipage}
-\caption{Detailed RQ1 benchmark evidence. In (a), ``win / $\tilde{\Delta}$'' gives COAST's instance win rate and median paired percentage cost reduction against each neural comparator. In (b), each PYTH scale has 10,240 matched instances and reports mean normalized cost under greedy decoding; $^{\dagger}$\texttt{n20m1} is a single-vehicle control.}
+\caption{Detailed RQ1 benchmark evidence. In (a), ``win / $\tilde{\Delta}$'' gives COAST's instance win rate and median paired percentage cost reduction against each neural comparator. In (b), each PYTH scale has 10,240 matched instances and reports mean normalized cost under greedy decoding.}
 \label{tab:rq1_detail}
 \end{table*}
 
@@ -650,7 +334,7 @@ We evaluate a full-factorial \texttt{n50m3} grid with four degrees of dynamism (
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/fig_rq2_four_heatmaps.pdf}
+\includegraphics[width=0.70\textwidth]{figures/fig_rq2_four_heatmaps.pdf}
 \caption{Cellwise DoD--TW comparison of all four neural methods arranged horizontally. Each panel displays the mean normalized cost of one method over 32 matched instances per cell; lower is better. All panels share a common colour scale, enabling direct visual comparison across methods. COAST is lowest in every cell, while MARDAM is the closest comparator throughout this grid.}
 \label{fig:rq2_components}
 \end{figure*}
@@ -684,29 +368,27 @@ B3: lookahead-only & +2.3\% & +2.1\% & +1.3\% & +0.5\% \\
 \label{tab:rq3_controls}
 \end{table}
 
-COAST has lower mean cost in all 28 variant--scale comparisons. Figure~\ref{fig:rq3_components}(a) contains only the three direct removals: each line is the mean-cost increase after removing one named signal. Removing ownership increases cost by 1.7--2.9\% at every scale, removing edge features by 2.5--3.4\%, and removing lookahead by 0.3--1.9\%. The direct-removal view shows a consistent scale effect for ownership and edge features; the smaller lookahead effect motivates the targeted regime analysis below rather than a universal claim. B5 is excluded from this panel because it changes the fusion rule rather than removing a signal.
+COAST has lower mean cost in all 28 variant--scale comparisons. Figure~\ref{fig:rq3_scale} contains only the three direct removals: each line is the mean-cost increase after removing one named signal. Removing ownership increases cost by 1.7--2.9\% at every scale, removing edge features by 2.5--3.4\%, and removing lookahead by 0.3--1.9\%. The direct-removal view shows a consistent scale effect for ownership and edge features; the smaller lookahead effect motivates the targeted regime analysis below rather than a universal claim. B5 is excluded from this panel because it changes the fusion rule rather than removing a signal.
 
 Table~\ref{tab:rq3_controls} addresses a separate question: whether the signals must be fused adaptively. B5 retains the three signal sources but replaces learned fusion with an equal-weight sum. Its cost increase grows from 3.6\% at \texttt{n50m3} to 7.2\%, 42.1\%, and 44.9\% at the three larger scales. Because B5 changes fusion rather than removing a source of information, it tests whether the signals need to be combined adaptively. B0, B1, and B3 show that simpler score compositions are also consistently worse; because each changes several connections at once, they are structural controls rather than source-specific causal tests.
 
-\begin{figure*}[t]
+\begin{figure}[t]
 \centering
-\begin{minipage}[t]{0.49\textwidth}
-\centering
-\includegraphics[width=\linewidth]{figures/fig_rq3_scale_column.pdf}\\[-2pt]
-\footnotesize (a) Direct signal removals across scale.
-\end{minipage}\hfill
-\begin{minipage}[t]{0.49\textwidth}
-\centering
-\includegraphics[width=\linewidth]{figures/fig_rq3_stress_column.pdf}\\[-2pt]
-\footnotesize (b) Effects in targeted operating regimes.
-\end{minipage}
-\caption{Complementary ablation views. In (a), each line removes one signal and reports the mean-cost increase relative to COAST. In (b), each cell reports the percentage mean-cost change over 500 matched evaluation instances after changing the design in its row: Base is in-distribution evaluation; Burst, Scale, Fleet, Sparse, and Tight respectively alter arrival dynamics, problem scale, fleet size, spatial structure, and time-window tightness. Positive (warm) values favor retaining the original design. The rule separates direct removals from the fixed-fusion B5 control.}
-\label{fig:rq3_components}
-\end{figure*}
+\includegraphics[width=0.75\linewidth]{figures/fig_rq3_scale_column.pdf}
+\caption{Direct signal removals across scale. Each line reports the mean-cost increase after removing one named COAST signal.}
+\label{fig:rq3_scale}
+\end{figure}
 
-Figure~\ref{fig:rq3_components}(b) asks \emph{when} the designs matter. In its first three rows, a positive cell means that removing the named signal increases cost; in the B5 row, it means that replacing adaptive fusion with fixed fusion increases cost. Removing ownership increases cost in every targeted regime (2.3--3.5\%), consistent with its coordination role. Lookahead has its largest effects under burst arrivals (+5.3\%) and tight windows (+5.2\%), the regimes in which an assignment has greater downstream consequences. Edge features have their largest effects under tight windows (+4.0\%) and sparse spatial structure (+4.7\%), where travel and temporal-feasibility cues are more discriminative.
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.75\linewidth]{figures/fig_rq3_stress_column.pdf}
+\caption{Targeted operating-regime effects. Each cell reports the percentage mean-cost change over 500 matched instances; positive (warm) values favor retaining the original design.}
+\label{fig:rq3_stress}
+\end{figure}
 
-Negative and near-neutral cells are reported rather than masked by an average. Removing lookahead improves the sparse-spatial regime by 2.2\%, and fixed-fusion B5 is near-neutral or favorable in some targeted regimes despite its large degradation on the scale benchmark. These patterns concern distinct evaluation axes: Table~\ref{tab:rq3_controls} varies the standard PYTH scale, whereas Figure~\ref{fig:rq3_components}(b) perturbs operating characteristics. Together, they support a more precise conclusion: ownership, anticipation, and edge-level feasibility are complementary context-sensitive signals, while adaptive fusion is critical for the multi-vehicle scale transfer tested here. They do not establish that each signal helps in every possible operating condition.
+Figure~\ref{fig:rq3_stress} asks \emph{when} the designs matter. In its first three rows, a positive cell means that removing the named signal increases cost; in the B5 row, it means that replacing adaptive fusion with fixed fusion increases cost. Removing ownership increases cost in every targeted regime (2.3--3.5\%), consistent with its coordination role. Lookahead has its largest effects under burst arrivals (+5.3\%) and tight windows (+5.2\%), the regimes in which an assignment has greater downstream consequences. Edge features have their largest effects under tight windows (+4.0\%) and sparse spatial structure (+4.7\%), where travel and temporal-feasibility cues are more discriminative.
+
+Negative and near-neutral cells are reported rather than masked by an average. Removing lookahead improves the sparse-spatial regime by 2.2\%, and fixed-fusion B5 is near-neutral or favorable in some targeted regimes despite its large degradation on the scale benchmark. These patterns concern distinct evaluation axes: Table~\ref{tab:rq3_controls} varies the standard PYTH scale, whereas Figure~\ref{fig:rq3_stress} perturbs operating characteristics. Together, they support a more precise conclusion: ownership, anticipation, and edge-level feasibility are complementary context-sensitive signals, while adaptive fusion is critical for the multi-vehicle scale transfer tested here. They do not establish that each signal helps in every possible operating condition.
 
 % Let the final wide diagnostic float to the next page if needed; forcing it
 % here would create a largely empty float-only page before the limitations.
@@ -750,7 +432,7 @@ We employ two groups of benchmark instances. The first group comprises 176 insta
 The second group consists of five synthetically generated datasets at increasing scales: \texttt{n20m1} (20 customers, 1 vehicle), \texttt{n50m3} (50 customers, 3 vehicles), \texttt{n100m5}, \texttt{n200m10}, and \texttt{n400m20}. These datasets scale both the number of customers and the fleet size simultaneously, enabling evaluation of coordination requirements under growing problem complexity. Each dataset contains 10,240 instances generated from the same distribution used during training. Each dataset is created by combining four degrees of dynamism (DoD = 0.10, 0.25, 0.50, 0.75) with four time-window ratios (0.25, 0.50, 0.75, 1.00). This group will be referred to as the PYTH benchmark, and the individual datasets will be referred to by their \texttt{nXmY} notation.
 
 \paragraph{Baselines}
-We compare COAST against several established methods. \textbf{MARDAM} is a multi-head attention-based routing policy that serves as a direct neural baseline with comparable capacity. \textbf{Attention Model (AM)} \cite{kool2018attention} and \textbf{PolyNet} \cite{hottung2025polynet} are Transformer-based routing architectures originally developed for static VRP, adapted here for the dynamic setting. We additionally include classical hyper-heuristic baselines: \textbf{GPHH} (genetic programming hyper-heuristic) \cite{TAM2026114234}, \textbf{C+C} (Clark-Wright savings with competence), \textbf{C+W} (Clark-Wright with waiting), and \textbf{WIQ+C} (work-in-queue plus competence). All neural baselines use the same training data distribution.
+We compare COAST against several established methods. \textbf{MARDAM} \cite{bono2021mardam} is a multi-head attention-based routing policy that serves as a direct neural baseline with comparable capacity. \textbf{Attention Model (AM)} \cite{kool2019attention} and \textbf{PolyNet} \cite{hottung2025polynet} are Transformer-based routing architectures originally developed for static VRP, adapted here for the dynamic setting. We additionally include classical hyper-heuristic baselines: \textbf{GPHH} (genetic programming hyper-heuristic) \cite{TAM2026114234}, \textbf{C+C} (Clark-Wright savings with competence), \textbf{C+W} (Clark-Wright with waiting), and \textbf{WIQ+C} (work-in-queue plus competence). All neural baselines use the same training data distribution.
 
 \paragraph{Training configuration}
 Model-specific architectural settings and parameter counts are summarized in Table~\ref{tab:model_config}. The key point for interpretation is that COAST and all internal ablations share the same backbone, so the ablation study isolates the contribution of the proposed modules rather than capacity differences. By contrast, MARDAM, AM, and PolyNet should be viewed as external neural baselines with comparable or stronger capacity, making improvements over them conservative rather than attributable to an oversized backbone.
@@ -1076,6 +758,7 @@ Several limitations of the current study should be acknowledged. First, the repo
 \fi
 
 \section{Conclusions and Future works} \label{sec:futurework}
+COAST separates local edge-aware compatibility, fleet-relative ownership, and candidate-conditioned lookahead for event-driven DVRPTW. Its matched-instance results support complementary, context-sensitive effects, while multi-seed validation and a route-level cost decomposition remain priorities.
 % Avoid stretching the final, partially filled references page.
 \raggedbottom
 \bibliography{ref}

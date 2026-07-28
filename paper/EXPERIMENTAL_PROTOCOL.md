@@ -35,9 +35,9 @@ This produces `hypothesis_summary.csv` and `hypothesis_summary.md`. Because this
 | **B3-Look** | ✅ Trained (1 seed) | `data/_Ablation/B3/`, same backbone |
 | **B5-Linear** | ✅ Trained (1 seed) | `data/_Ablation/B5/`, same backbone |
 | **B-EdgeOff** | ✅ Trained (1 seed) | `data/_Ablation/Edgeoff/`, same backbone |
-| **AM (Attention Model)** | ✅ Trained (1 seed) | `/home/admin_wsl/projects/RL4DVRPTW/data/_AM/`, `layer=5, head=8, ff=256` |
-| **PolyNet** | ✅ Trained (1 seed) | `/home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/`, `layer=5, head=8, ff=256` |
-| **MARDAM** | 🔧 Available | `/home/admin_wsl/projects/RL4DVRPTW/mdam/` (needs training) |
+| **AM (Attention Model)** | ✅ Trained (1 seed) | `{{RL4DVRPTW_ROOT}}/data/_AM/`, `layer=5, head=8, ff=256` |
+| **PolyNet** | ✅ Trained (1 seed) | `{{RL4DVRPTW_ROOT}}/data/_PolyNet/`, `layer=5, head=8, ff=256` |
+| **MARDAM** | 🔧 Available | `{{RL4DVRPTW_ROOT}}/mdam/` (needs training) |
 | **Classical baselines** | ❌ Not yet | OR-Tools, Greedy NN need implementation |
 | **Multi-seed** | ❌ Not yet | All models currently 1 seed only |
 | **OOD evaluation** | ❌ Not yet | No out-of-distribution tests run |
@@ -76,8 +76,8 @@ TRAIN_CONFIG = {
     "horizon": 480,
     "tw_ratio": [0.25, 0.5, 0.75, 1.0],
     "tw_range": [30, 91],
-    "deg_of_dyna": [0.1, 0.25, 0.5, 0.75],
-    "appear_early_ratio": [0.0, 0.5, 0.75, 1.0],
+    "dod": [0.1, 0.25, 0.5, 0.75],
+    "d_early_ratio": [0.0, 0.5, 0.75, 1.0],
     "dur_range": [10, 31],
     "dem_range": [5, 41],
     "loc_range": [0, 101],
@@ -502,7 +502,7 @@ if __name__ == "__main__":
 
 #### 3.2.1 AM (Attention Model — Kool et al. 2019)
 
-Checkpoint: `/home/admin_wsl/projects/RL4DVRPTW/data/_AM/chkpt_best.pyth`
+Checkpoint: `{{RL4DVRPTW_ROOT}}/data/_AM/chkpt_best.pyth`
 Config: `layer=5, head=8, ff=256` (mạnh hơn COAST về capacity)
 
 Đánh giá:
@@ -510,20 +510,20 @@ Config: `layer=5, head=8, ff=256` (mạnh hơn COAST về capacity)
 ```bash
 python script/eval_literature_baselines.py \
     --model-type am \
-    --checkpoint /home/admin_wsl/projects/RL4DVRPTW/data/_AM/chkpt_best.pyth \
+    --checkpoint {{RL4DVRPTW_ROOT}}/data/_AM/chkpt_best.pyth \
     --test-data data/test_dvrptw_n50m3_1000.pyth \
     --output output/eval_results/am_results.json
 ```
 
 #### 3.2.2 PolyNet
 
-Checkpoint: `/home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/chkpt_best.pyth`
+Checkpoint: `{{RL4DVRPTW_ROOT}}/data/_PolyNet/chkpt_best.pyth`
 Config: `layer=5, head=8, ff=256`
 
 ```bash
 python script/eval_literature_baselines.py \
     --model-type polynet \
-    --checkpoint /home/admin_wsl/projects/RL4DVRPTW/data/_PolyNet/chkpt_best.pyth \
+    --checkpoint {{RL4DVRPTW_ROOT}}/data/_PolyNet/chkpt_best.pyth \
     --test-data data/test_dvrptw_n50m3_1000.pyth \
     --output output/eval_results/polynet_results.json
 ```
@@ -670,7 +670,7 @@ def compute_lookahead_calibration(lookahead_scores, actual_future_costs):
 | OOD-Scale | n=100, m=5 | Larger instances |
 | OOD-Fleet | n=50, m=6 | More vehicles |
 | OOD-Tight | tw_range=[10,40] | Tight time windows |
-| OOD-Burst | deg_of_dyna=[0.5,0.75,1.0] | Highly dynamic |
+| OOD-Burst | dod=[0.5,0.75,1.0] | Highly dynamic |
 | OOD-Sparse | loc_range=[0,201] | Sparse spatial |
 
 **Deliverables:**
