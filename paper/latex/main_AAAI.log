@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.6.15)  27 JUL 2026 09:09
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.6.15)  28 JUL 2026 11:29
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -23,7 +23,7 @@ File: size10.clo 2025/01/22 v1.4n Standard LaTeX file (size option)
 \abovecaptionskip=\skip49
 \belowcaptionskip=\skip50
 \bibindent=\dimen150
-) (../AuthorKit27/aaai2027.sty
+) (./aaai2027.sty
 Package: aaai2027 2027/05/04 AAAI 2027 Submission format
 
 Conference Style for AAAI for LaTeX 2e
@@ -350,65 +350,27 @@ LaTeX Font Info:    Font shape `T1/ntxtlf/b/n' will be
 (Font)              scaled to size 9.0pt on input line 426.
 LaTeX Font Info:    Font shape `T1/ntxtlf/m/it' will be
 (Font)              scaled to size 9.0pt on input line 429.
-LaTeX Font Info:    Trying to load font information for T1+pcr on input line 513.
+LaTeX Font Info:    Trying to load font information for T1+pcr on input line 489.
  (/home/tuantb/.TinyTeX/texmf-dist/tex/latex/psnfss/t1pcr.fd
 File: t1pcr.fd 2001/06/04 font definitions for T1/pcr.
 ) [6{/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/base/8r.enc}]
-Underfull \vbox (badness 1194) has occurred while \output is active []
-
- [7]
-<figures/fig_csv_benchmark.pdf, id=49, 498.34181pt x 245.30835pt>
-File: figures/fig_csv_benchmark.pdf Graphic file (type pdf)
-<use figures/fig_csv_benchmark.pdf>
-Package pdftex.def Info: figures/fig_csv_benchmark.pdf  used on input line 600.
-(pdftex.def)             Requested size: 430.00958pt x 211.68347pt.
- [8]
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
-LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
-(Font)              scaled to size 6.0pt on input line 667.
-LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
-(Font)              scaled to size 5.0pt on input line 667.
-<figures/fig_pyth_scale.pdf, id=53, 496.44162pt x 245.1446pt>
-File: figures/fig_pyth_scale.pdf Graphic file (type pdf)
-<use figures/fig_pyth_scale.pdf>
-Package pdftex.def Info: figures/fig_pyth_scale.pdf  used on input line 702.
-(pdftex.def)             Requested size: 239.39438pt x 118.21419pt.
- [9]
-<figures/fig_dynamic_sensitivity.pdf, id=57, 513.19969pt x 413.14302pt>
-File: figures/fig_dynamic_sensitivity.pdf Graphic file (type pdf)
-<use figures/fig_dynamic_sensitivity.pdf>
-Package pdftex.def Info: figures/fig_dynamic_sensitivity.pdf  used on input line 745.
-(pdftex.def)             Requested size: 239.39438pt x 192.72101pt.
-
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
- [10 <./figures/fig_csv_benchmark.pdf> <./figures/fig_pyth_scale.pdf>] [11 <./figures/fig_dynamic_sensitivity.pdf>]
-Underfull \hbox (badness 10000) in paragraph at lines 824--824
-[]\T1/ntxtlf/m/n/9 COAST vs
- []
-
-
-Underfull \hbox (badness 3049) in paragraph at lines 824--824
-[]\T1/ntxtlf/m/n/9 no_ownership is 1.7--2.9% worse on \T1/pcr/m/n/9 n50m3\T1/ntxtlf/m/n/9 --
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 825--825
-[]\T1/ntxtlf/m/n/9 COAST vs
- []
-
-
-Underfull \hbox (badness 3108) in paragraph at lines 825--825
-[]\T1/ntxtlf/m/n/9 no_lookahead is 0.3--1.9% worse on \T1/pcr/m/n/9 n50m3\T1/ntxtlf/m/n/9 --
- []
-
-
-Underfull \hbox (badness 1077) in paragraph at lines 827--827
-[]\T1/ntxtlf/m/n/9 H4: non-lin-ear fu-sion im-
- []
-
-[12] [13] (./main_AAAI.bbl) [14
+<figures/fig_rq2_four_heatmaps.pdf, id=38, 532.38853pt x 201.41847pt>
+File: figures/fig_rq2_four_heatmaps.pdf Graphic file (type pdf)
+<use figures/fig_rq2_four_heatmaps.pdf>
+Package pdftex.def Info: figures/fig_rq2_four_heatmaps.pdf  used on input line 653.
+(pdftex.def)             Requested size: 505.89pt x 191.39563pt.
+ [7] [8 <./figures/fig_rq2_four_heatmaps.pdf>]
+<figures/fig_rq3_scale_column.pdf, id=124, 250.95634pt x 214.40051pt>
+File: figures/fig_rq3_scale_column.pdf Graphic file (type pdf)
+<use figures/fig_rq3_scale_column.pdf>
+Package pdftex.def Info: figures/fig_rq3_scale_column.pdf  used on input line 695.
+(pdftex.def)             Requested size: 247.88887pt x 211.77951pt.
+<figures/fig_rq3_stress_column.pdf, id=125, 250.53552pt x 230.98268pt>
+File: figures/fig_rq3_stress_column.pdf Graphic file (type pdf)
+<use figures/fig_rq3_stress_column.pdf>
+Package pdftex.def Info: figures/fig_rq3_stress_column.pdf  used on input line 700.
+(pdftex.def)             Requested size: 247.88887pt x 228.54315pt.
+ [9] (./main_AAAI.bbl [10 <./figures/fig_rq3_scale_column.pdf> <./figures/fig_rq3_stress_column.pdf>]) [11
 
 ] (./main_AAAI.aux)
  ***********
@@ -417,18 +379,18 @@ L3 programming layer <2020/03/25>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 7011 strings out of 469152
- 112383 string characters out of 5459998
- 558787 words of memory out of 5000000
- 35898 multiletter control sequences out of 15000+600000
- 682330 words of font info for 87 fonts, out of 8000000 for 9000
+ 6997 strings out of 469152
+ 112125 string characters out of 5459998
+ 559598 words of memory out of 5000000
+ 35885 multiletter control sequences out of 15000+600000
+ 670854 words of font info for 83 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 89i,12n,117p,1691b,371s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 89i,16n,117p,1691b,369s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi5.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy5.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/tex-gyre/qtmr.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/urw/courier/ucrr8a.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/newtx/ztmb.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/newtx/ztmr.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/newtx/ztmri.pfb>
-Output written on main_AAAI.pdf (14 pages, 449889 bytes).
+Output written on main_AAAI.pdf (11 pages, 455985 bytes).
 PDF statistics:
- 314 PDF objects out of 1000 (max. 8388607)
- 128 compressed objects within 2 object streams
+ 371 PDF objects out of 1000 (max. 8388607)
+ 135 compressed objects within 2 object streams
  0 named destinations out of 1000 (max. 500000)
  16 words of extra memory for PDF output out of 10000 (max. 10000000)
 

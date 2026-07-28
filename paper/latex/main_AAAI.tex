@@ -484,6 +484,241 @@ $\alpha,\,\beta$                 & Critic weight and entropy coefficient \\
 
 \section{Experimental results} \label{sec:experiment}
 
+\subsection{Evaluation protocol}
+
+We evaluate the normalized routing objective from Section~\ref{sec:prob}, which combines travel distance, lateness, and unserved-request penalties; lower is better. All neural methods use greedy decoding on fixed, matched test instances. The Solomon-style suite contains 176 instances across \texttt{h100}, \texttt{h200}, and \texttt{h400}; PYTH contains 10,240 instances at each scale. COAST and every internal variant use the same instance-generation and optimization protocol, with an ablation changing only its named design. MARDAM, AM, and PolyNet are external neural baselines; GPHH, C+C, C+W, and WIQ+C are hyper-heuristic or dispatching-rule baselines.
+
+RQ1 keeps benchmark reporting and statistical inference distinct. On the Solomon-style suite, all eight methods are evaluated on the same 176 instances. We first apply a Friedman omnibus test across COAST, the three neural baselines, GPHH, and the three dispatching rules, then test the seven prespecified COAST--baseline contrasts with two-sided paired Wilcoxon tests and Holm correction. A neural-only Friedman test provides a like-for-like complement. These tests quantify consistency across matched test instances, not robustness across independently trained seeds.
+
+\subsection{RQ1: Does COAST improve benchmark routing quality?}
+
+\paragraph{Question.} Does the decision decomposition improve routing quality across spatial topologies, dispatching baselines, and increasing fleet scale?
+
+Tables~\ref{tab:rq1_solomon_neural} and \ref{tab:rq1_solomon_classical} split the complete Solomon-style benchmark into learned and classical comparators. This preserves all R, C, and RC topology evidence while keeping each comparison set readable in a single column.
+
+\begin{table}[t]
+\centering
+{\small
+\setlength{\tabcolsep}{2.4pt}
+\begin{tabular}{llrrrr}
+\toprule
+Scale & Top. & COAST & MARDAM & AM & Poly. \\
+\midrule
+\texttt{h100} & C  & \textbf{67.65} & 65.08 & 73.01 & 70.36 \\
+               & R  & \textbf{57.22} & 60.03 & 66.08 & 63.97 \\
+               & RC & \textbf{65.69} & 67.42 & 73.07 & 70.31 \\
+\addlinespace
+\texttt{h200} & C  & \textbf{117.61} & 162.43 & 126.64 & 137.04 \\
+               & R  & \textbf{104.24} & 142.69 & 124.00 & 125.65 \\
+               & RC & \textbf{105.19} & 143.48 & 125.66 & 130.48 \\
+\addlinespace
+\texttt{h400} & C  & \textbf{220.65} & 323.84 & 248.35 & 258.78 \\
+               & R  & \textbf{201.98} & 314.44 & 243.97 & 238.60 \\
+               & RC & \textbf{203.26} & 322.73 & 250.32 & 244.98 \\
+\bottomrule
+\end{tabular}
+}
+\caption{Solomon-style normalized routing cost: neural comparisons (lower is better). ``Poly.'' denotes PolyNet. COAST is best in 26/27 size--topology aggregates; MARDAM is lower only on \texttt{h100}-C.}
+\label{tab:rq1_solomon_neural}
+\end{table}
+
+\begin{table}[t]
+\centering
+{\small
+\setlength{\tabcolsep}{2.0pt}
+\begin{tabular}{llrrrrr}
+\toprule
+Scale & Top. & COAST & GPHH & C+C & C+W & WIQ+C \\
+\midrule
+\texttt{h100} & C  & \textbf{67.65} & 80.63 & 130.71 & 118.12 & 175.02 \\
+               & R  & \textbf{57.22} & 72.02 & 147.70 & 143.05 & 179.86 \\
+               & RC & \textbf{65.69} & 80.11 & 152.99 & 141.10 & 181.66 \\
+\addlinespace
+\texttt{h200} & C  & \textbf{117.61} & 191.74 & 269.58 & 248.67 & 361.24 \\
+               & R  & \textbf{104.24} & 184.87 & 276.62 & 273.03 & 348.95 \\
+               & RC & \textbf{105.19} & 181.00 & 282.86 & 283.12 & 350.99 \\
+\addlinespace
+\texttt{h400} & C  & \textbf{220.65} & 374.85 & 630.06 & 616.13 & 752.28 \\
+               & R  & \textbf{201.98} & 354.62 & 624.08 & 618.70 & 720.14 \\
+               & RC & \textbf{203.26} & 352.72 & 634.84 & 636.76 & 724.18 \\
+\bottomrule
+\end{tabular}
+}
+\caption{Solomon-style normalized routing cost: GPHH and dispatching comparisons. COAST is lower-cost than GPHH on 172/176 instances and than each dispatching rule on all 176.}
+\label{tab:rq1_solomon_classical}
+\end{table}
+
+\paragraph{Solomon benchmark.} The two Solomon tables establish three points. First, COAST is best in every \texttt{h200} and \texttt{h400} size--topology aggregate. Second, the small-scale exception is explicit rather than averaged away: at \texttt{h100}, MARDAM is 3.8\% lower on the compact C topology, while COAST still leads the \texttt{h100} aggregate and its R and RC subsets. Measured from the scale-level means, COAST's reduction over the best neural comparator is 1.9\%, 13.0\%, and 15.1\% at \texttt{h100}, \texttt{h200}, and \texttt{h400}, respectively.
+
+Third, Table~\ref{tab:rq1_solomon_classical} places the neural comparison in a broader dispatching context. COAST beats GPHH on 172/176 individual instances and every dispatching rule on all 176. The separation is especially pronounced at \texttt{h400}: on R instances, COAST's 201.98 cost is below GPHH's 354.62 and the two savings-based rules' 624.08 and 618.70. Thus, the result is not limited to one learned comparator, while the neural table remains the more demanding comparison because its baselines are closer.
+
+\begin{table*}[t]
+\centering
+\begin{minipage}[t]{0.47\textwidth}
+\centering
+{\small
+\setlength{\tabcolsep}{3.0pt}
+\begin{tabular}{lrccc}
+\toprule
+Topology & $n$ & \shortstack{MARDAM\\win / $\tilde{\Delta}$} & \shortstack{AM\\win / $\tilde{\Delta}$} & \shortstack{PolyNet\\win / $\tilde{\Delta}$} \\
+\midrule
+R  & 63 & 95.2\% / 23.1\% & 98.4\% / 15.4\% & 93.7\% / 14.8\% \\
+C  & 57 & 82.5\% / 21.3\% & 89.5\% / 9.6\%  & 87.7\% / 11.0\% \\
+RC & 56 & 89.3\% / 25.0\% & 94.6\% / 15.8\% & 92.9\% / 15.0\% \\
+\bottomrule
+\end{tabular}
+}\\[1pt]
+\footnotesize (a) Topology-stratified neural comparisons.
+\end{minipage}\hfill
+\begin{minipage}[t]{0.47\textwidth}
+\centering
+{\small
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{lrrrr}
+\toprule
+PYTH scale & COAST & MARDAM & AM & PolyNet \\
+\midrule
+\texttt{n20m1}$^{\dagger}$ & \textbf{24.78} & 26.13 & 25.40 & 25.58 \\
+\texttt{n50m3}             & \textbf{43.92} & 46.48 & 49.58 & 49.93 \\
+\texttt{n100m5}            & \textbf{94.85} & 99.50 & 103.85 & 105.13 \\
+\texttt{n200m10}           & \textbf{182.38} & 203.24 & 196.53 & 200.89 \\
+\texttt{n400m20}           & \textbf{355.99} & 430.48 & 378.98 & 389.72 \\
+\bottomrule
+\end{tabular}
+}\\[1pt]
+\footnotesize (b) PYTH greedy-decoding results.
+\end{minipage}
+\caption{Detailed RQ1 benchmark evidence. In (a), ``win / $\tilde{\Delta}$'' gives COAST's instance win rate and median paired percentage cost reduction against each neural comparator. In (b), each PYTH scale has 10,240 matched instances and reports mean normalized cost under greedy decoding; $^{\dagger}$\texttt{n20m1} is a single-vehicle control.}
+\label{tab:rq1_detail}
+\end{table*}
+
+Table~\ref{tab:rq1_detail}(a) shows where the Solomon gains arise. C is consistently the closest topology: it has the lowest COAST win rate and median reduction for each of the three neural comparisons. Even there, COAST wins 82.5\% of matched instances against MARDAM and 87.7\% against PolyNet. The R and RC results are stronger, with 89.3--98.4\% win rates across the three neural comparators. The spatial evidence therefore does not depend on a single topology.
+
+\paragraph{PYTH benchmark.} Table~\ref{tab:rq1_detail}(b) provides complementary scale evidence by holding the generated family fixed while jointly increasing customer count and fleet size; every row contains 10,240 matched instances. The single-vehicle control has the smallest gap, as fleet ownership cannot affect a one-vehicle decision. Once multiple vehicles must coordinate, COAST improves on the best neural competitor by 5.5\%, 4.7\%, 7.2\%, and 6.1\% from \texttt{n50m3} through \texttt{n400m20}. The gap is not monotone in scale, but it persists after every joint customer--fleet increase; this is consistent with a coordination benefit rather than a simple route-length effect.
+
+\begin{table*}[t]
+\centering
+\begin{minipage}[t]{0.34\textwidth}
+\centering
+{\small
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{lrrr}
+\toprule
+Scope & $n$ & $\chi^2_F$ & $p_F$ \\
+\midrule
+All 8 methods & 176 & 1081.14 & $3.52\mathrm{e}{-229}$ \\
+Neural subset & 176 & 244.03 & $1.28\mathrm{e}{-52}$ \\
+R (all 8) & 63 & 397.49 & $8.23\mathrm{e}{-82}$ \\
+C (all 8) & 57 & 336.30 & $1.05\mathrm{e}{-68}$ \\
+RC (all 8) & 56 & 352.19 & $4.19\mathrm{e}{-72}$ \\
+\bottomrule
+\end{tabular}
+}\\[1pt]
+\footnotesize (a) Friedman tests.
+\end{minipage}\hfill
+\begin{minipage}[t]{0.62\textwidth}
+\centering
+{\small
+\setlength{\tabcolsep}{3.0pt}
+\begin{tabular}{lrrrrr}
+\toprule
+Baseline & W/L & $\tilde{\Delta}$ & $T_{\min}$ & $p_{\mathrm{raw}}$ & $p_{\mathrm{Holm}}$ \\
+\midrule
+MARDAM  & 157/19 & 23.4\% & 522 & $7.03\mathrm{e}{-27}$ & $7.03\mathrm{e}{-27}$ \\
+AM      & 166/10 & 14.4\% & 206 & $4.03\mathrm{e}{-29}$ & $1.21\mathrm{e}{-28}$ \\
+PolyNet & 161/15 & 13.0\% & 408 & $1.12\mathrm{e}{-27}$ & $2.24\mathrm{e}{-27}$ \\
+GPHH    & 172/4  & 27.6\% & 27  & $1.97\mathrm{e}{-30}$ & $8.68\mathrm{e}{-30}$ \\
+C+C     & 176/0  & 62.7\% & 0   & $1.24\mathrm{e}{-30}$ & $8.68\mathrm{e}{-30}$ \\
+C+W     & 176/0  & 62.5\% & 0   & $1.24\mathrm{e}{-30}$ & $8.68\mathrm{e}{-30}$ \\
+WIQ+C   & 176/0  & 68.1\% & 0   & $1.24\mathrm{e}{-30}$ & $8.68\mathrm{e}{-30}$ \\
+\bottomrule
+\end{tabular}
+}\\[1pt]
+\footnotesize (b) Two-sided Wilcoxon tests.
+\end{minipage}
+\caption{RQ1 statistical validation on the 176 matched Solomon instances. In (a), ``all 8'' comprises COAST, MARDAM, AM, PolyNet, GPHH, C+C, C+W, and WIQ+C; the neural subset is a like-for-like complement. In (b), W/L is COAST's win/loss count, $\tilde{\Delta}$ is its median percentage cost reduction, and $T_{\min}$ is the smaller of the positive and negative Wilcoxon signed-rank sums. Holm adjustment is applied to the seven prespecified post hoc contrasts shown here.}
+\label{tab:rq1_statistics}
+\end{table*}
+
+\paragraph{Statistical validation.} Table~\ref{tab:rq1_statistics} reports the inferential evidence after the two benchmark views. The all-method Friedman test rejects equal performance ($\chi^2_F=1081.14$, $p=3.52\mathrm{e}{-229}$); the neural-only family and the R, C, and RC subsets yield the same conclusion. The post hoc panel covers every reported Solomon comparator, including GPHH and all three dispatching rules. Each COAST contrast remains significant after the seven-way Holm correction, including all three neural baselines (MARDAM: $p_{\mathrm{Holm}}=7.03\mathrm{e}{-27}$; AM: $1.21\mathrm{e}{-28}$; PolyNet: $2.24\mathrm{e}{-27}$). These tests establish consistency across matched instances; they do not substitute for multi-seed training validation.
+
+\subsection{RQ2: How do dynamism and time windows change the advantage?}
+
+\paragraph{Question.} Does COAST retain an advantage as customer arrivals become more dynamic and time windows become tighter?
+
+We evaluate a full-factorial \texttt{n50m3} grid with four degrees of dynamism (DoD), four time-window (TW) ratios, and 32 matched instances per cell (512 total). This is a \emph{within-support sensitivity analysis}: it varies factors represented in data construction rather than claiming an out-of-distribution result. Figure~\ref{fig:rq2_components} reports all four neural methods on the complete grid with one shared colour scale, so the cellwise comparison is not restricted to a single baseline.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_rq2_four_heatmaps.pdf}
+\caption{Cellwise DoD--TW comparison of all four neural methods arranged horizontally. Each panel displays the mean normalized cost of one method over 32 matched instances per cell; lower is better. All panels share a common colour scale, enabling direct visual comparison across methods. COAST is lowest in every cell, while MARDAM is the closest comparator throughout this grid.}
+\label{fig:rq2_components}
+\end{figure*}
+
+Figure~\ref{fig:rq2_components} shows a consistent ordering across the complete grid: COAST has the lowest cost in all 16 cells, MARDAM is next-lowest throughout, and both AM and PolyNet remain higher. MARDAM is therefore the most stringent cellwise comparator. At DoD $=0.10$, COAST's reduction over MARDAM is 0.5--1.5\% across TW ratios; at DoD $=0.75$, it is 2.3--6.2\%. The largest reduction occurs at DoD $=0.75$, TW $=0.25$, and remains 5.6\% and 5.1\% at TW $=0.50$ and $0.75$, respectively. Across the full grid, COAST's reduction ranges from 5.4--13.0\% versus AM and 4.4--13.9\% versus PolyNet. The high-dynamism pattern is therefore not an artifact of selecting one baseline; it is consistent with the greater cost of early decisions when more requests remain to arrive.
+
+The interaction is not monotonic in both factors. At the widest TW ratio ($1.00$), COAST still leads every comparator, but its high-DoD reduction over MARDAM falls to 2.3\%. Thus, the evidence does not support a claim that lookahead or ownership helps uniformly in every condition. Instead, within this grid, the largest COAST margins occur under high dynamism when time windows are not widest. This pattern is consistent with, but does not itself prove, the proposed separation of current vehicle--customer compatibility from fleet coordination and future impact.
+
+The marginal means reinforce the cellwise result. All methods become costlier as TW increases, yet COAST remains nearly flat from DoD $=0.10$ to $0.50$ (43.64 to 43.61) before rising to 44.45 at $0.75$; MARDAM increases monotonically from 44.07 to 46.68. At TW $=1.00$, COAST reaches 45.90, compared with 46.62 for MARDAM and approximately 50.7 for AM and PolyNet. Relative to MARDAM, COAST therefore has a flatter response to arrival dynamism while retaining an advantage throughout the time-window sweep.
+
+\subsection{RQ3: Which components matter, and when?}
+
+\paragraph{Question.} Which decision signals account for COAST's gains, and do their effects become clearer in the regimes they were designed to address?
+
+\begin{table}[t]
+\centering
+{\small
+\setlength{\tabcolsep}{2.4pt}
+\begin{tabular}{lrrrr}
+\toprule
+Control & \texttt{n50m3} & \texttt{n100m5} & \texttt{n200m10} & \texttt{n400m20} \\
+\midrule
+B5: fixed fusion & +3.6\% & +7.2\% & \textbf{+42.1\%} & \textbf{+44.9\%} \\
+B0: base attention & +3.1\% & +2.6\% & +2.3\% & +2.1\% \\
+B1: memory-only & +3.4\% & +3.0\% & +2.1\% & +1.5\% \\
+B3: lookahead-only & +2.3\% & +2.1\% & +1.3\% & +0.5\% \\
+\bottomrule
+\end{tabular}
+}
+\caption{Fusion and structural controls: percentage increase in mean cost over COAST. B5 preserves all signals but fixes their fusion to an equal-weight sum. \texttt{n20m1} is omitted because it has no fleet coordination.}
+\label{tab:rq3_controls}
+\end{table}
+
+COAST has lower mean cost in all 28 variant--scale comparisons. Figure~\ref{fig:rq3_components}(a) contains only the three direct removals: each line is the mean-cost increase after removing one named signal. Removing ownership increases cost by 1.7--2.9\% at every scale, removing edge features by 2.5--3.4\%, and removing lookahead by 0.3--1.9\%. The direct-removal view shows a consistent scale effect for ownership and edge features; the smaller lookahead effect motivates the targeted regime analysis below rather than a universal claim. B5 is excluded from this panel because it changes the fusion rule rather than removing a signal.
+
+Table~\ref{tab:rq3_controls} addresses a separate question: whether the signals must be fused adaptively. B5 retains the three signal sources but replaces learned fusion with an equal-weight sum. Its cost increase grows from 3.6\% at \texttt{n50m3} to 7.2\%, 42.1\%, and 44.9\% at the three larger scales. Because B5 changes fusion rather than removing a source of information, it tests whether the signals need to be combined adaptively. B0, B1, and B3 show that simpler score compositions are also consistently worse; because each changes several connections at once, they are structural controls rather than source-specific causal tests.
+
+\begin{figure*}[t]
+\centering
+\begin{minipage}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/fig_rq3_scale_column.pdf}\\[-2pt]
+\footnotesize (a) Direct signal removals across scale.
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/fig_rq3_stress_column.pdf}\\[-2pt]
+\footnotesize (b) Effects in targeted operating regimes.
+\end{minipage}
+\caption{Complementary ablation views. In (a), each line removes one signal and reports the mean-cost increase relative to COAST. In (b), each cell reports the percentage mean-cost change over 500 matched evaluation instances after changing the design in its row: Base is in-distribution evaluation; Burst, Scale, Fleet, Sparse, and Tight respectively alter arrival dynamics, problem scale, fleet size, spatial structure, and time-window tightness. Positive (warm) values favor retaining the original design. The rule separates direct removals from the fixed-fusion B5 control.}
+\label{fig:rq3_components}
+\end{figure*}
+
+Figure~\ref{fig:rq3_components}(b) asks \emph{when} the designs matter. In its first three rows, a positive cell means that removing the named signal increases cost; in the B5 row, it means that replacing adaptive fusion with fixed fusion increases cost. Removing ownership increases cost in every targeted regime (2.3--3.5\%), consistent with its coordination role. Lookahead has its largest effects under burst arrivals (+5.3\%) and tight windows (+5.2\%), the regimes in which an assignment has greater downstream consequences. Edge features have their largest effects under tight windows (+4.0\%) and sparse spatial structure (+4.7\%), where travel and temporal-feasibility cues are more discriminative.
+
+Negative and near-neutral cells are reported rather than masked by an average. Removing lookahead improves the sparse-spatial regime by 2.2\%, and fixed-fusion B5 is near-neutral or favorable in some targeted regimes despite its large degradation on the scale benchmark. These patterns concern distinct evaluation axes: Table~\ref{tab:rq3_controls} varies the standard PYTH scale, whereas Figure~\ref{fig:rq3_components}(b) perturbs operating characteristics. Together, they support a more precise conclusion: ownership, anticipation, and edge-level feasibility are complementary context-sensitive signals, while adaptive fusion is critical for the multi-vehicle scale transfer tested here. They do not establish that each signal helps in every possible operating condition.
+
+% Let the final wide diagnostic float to the next page if needed; forcing it
+% here would create a largely empty float-only page before the limitations.
+
+\subsection{Limitations}
+
+The internal comparisons use one trained seed per configuration, so paired tests establish consistency over test instances rather than training-seed robustness. The lookahead head is optimized only through policy gradient, and its context-dependent stress profile motivates multi-seed validation and stronger training signals. Finally, normalized cost is the primary metric; a route-verified decomposition into distance, late service, and skipped requests is deferred to the artifact.
+
+% Legacy experiment draft retained below for result-audit traceability; it is
+% intentionally excluded from the submission in favor of the RQ-based section.
+\iffalse
+
 We evaluate COAST on two complementary benchmark families to assess routing quality, dynamic robustness, and the contribution of each architectural component. The primary metric is normalized routing cost under greedy decoding; sampling-based decoding is reported where available as a supplementary reference. Unless otherwise stated, lower cost is better.
 
 \subsection{Experimental setup}
@@ -837,6 +1072,8 @@ Overall, the results demonstrate that COAST is most effective in the regimes tar
 \subsection{Limitations}
 
 Several limitations of the current study should be acknowledged. First, the reported results are based on single-seed training for each model configuration. The smaller effect sizes observed for the lookahead and ownership ablations could be sensitive to training variance; multi-seed experiments with statistical significance testing would strengthen confidence in these findings. Second, the lookahead head is trained solely through the policy gradient objective; a supervised calibration target could potentially enhance its effectiveness and provide a clearer signal for validating the anticipation hypothesis. Third, the current evaluation focuses on normalized routing cost as the primary metric; a more detailed decomposition into travel distance, skipped requests, and time-window penalties would provide additional insight into behavioral differences between methods. Finally, classical optimization baselines such as LKH3 and OR-Tools, while informative for static or oracle settings, are not directly applicable to the dynamic sequential decision framework without substantial modification; their inclusion remains an avenue for future work.
+
+\fi
 
 \section{Conclusions and Future works} \label{sec:futurework}
 % Avoid stretching the final, partially filled references page.

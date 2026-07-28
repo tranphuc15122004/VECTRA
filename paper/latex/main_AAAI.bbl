@@ -1,4 +1,4 @@
-\begin{thebibliography}{18}
+\begin{thebibliography}{17}
 \providecommand{\natexlab}[1]{#1}
 
 \bibitem[{Akkerman, Mes, and van Jaarsveld(2025)}]{akkerman2025comparison}
@@ -10,11 +10,6 @@ Akkerman, F.; Mes, M.; and van Jaarsveld, W. 2025.
 Gao, C.; Shang, H.; Xue, K.; Li, D.; and Qian, C. 2023.
 \newblock Towards generalizable neural solvers for vehicle routing problems via ensemble with transferrable local policy.
 \newblock \emph{arXiv preprint arXiv:2308.14104}.
-
-\bibitem[{Hottung, Mahajan, and Tierney(2025)}]{hottung2025polynet}
-Hottung, A.; Mahajan, M.; and Tierney, K. 2025.
-\newblock PolyNet: Learning diverse solution strategies for neural combinatorial optimization.
-\newblock In \emph{International Conference on Learning Representations}, volume 2025, 80417--80435.
 
 \bibitem[{Konovalenko and Hvattum(2024)}]{konovalenko2024optimizing}
 Konovalenko, A.; and Hvattum, L.~M. 2024.

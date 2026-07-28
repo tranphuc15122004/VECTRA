@@ -1,14 +1,13 @@
 # Fdb version 4
-["bibtex main_AAAI"] 1785143218.7049 "main_AAAI.aux" "main_AAAI.bbl" "main_AAAI" 1785143396.64664 0
+["bibtex main_AAAI"] 1785237846.96907 "main_AAAI.aux" "main_AAAI.bbl" "main_AAAI" 1785238153.06433 0
   "../AuthorKit27/aaai2027.bst" 1785127835.50311 30207 bd248dfe461b9b2fc7481a44feafe197 ""
   "./ref.bib" 1785126895.73007 18076 f8816aa0d08e0472ec9f7e937c1aacbd ""
-  "main_AAAI.aux" 1785143396.52048 3838 3dcfcb0092cb800b1138205610e1f7a5 "pdflatex"
+  "main_AAAI.aux" 1785238152.93718 3339 e28f6f5f36aadb3658a49ce416e6c021 "pdflatex"
   (generated)
   "main_AAAI.bbl"
   "main_AAAI.blg"
   (rewritten before read)
-["pdflatex"] 1785143396.0541 "main_AAAI.tex" "main_AAAI.pdf" "main_AAAI" 1785143396.64707 0
-  "../AuthorKit27/aaai2027.sty" 1785127835.50311 16915 1b1c792e2acfbbd8b672259e267b95d8 ""
+["pdflatex"] 1785238152.49195 "main_AAAI.tex" "main_AAAI.pdf" "main_AAAI" 1785238153.06458 0
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/newtx/ntx-ec-tlf.enc" 1698694482 2914 fdbc4a54b9bc76f4551b5303f2737d33 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/tex-gyre/q-ts1.enc" 1529098226 3124 3813fd4c981d99822890a2861b0d274c ""
@@ -120,12 +119,13 @@
   "/home/tuantb/.TinyTeX/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1785132108 181669 2c90c862637269f5c28baf2e320f8782 ""
   "/home/tuantb/.TinyTeX/texmf-var/web2c/pdftex/pdflatex.fmt" 1781539024 2251004 4d5a3da8d468249d0f0f2fd979f5ca12 ""
   "/home/tuantb/.TinyTeX/texmf.cnf" 1780461603 637 edd806fb06a89761a6034e1968af9017 ""
-  "figures/fig_csv_benchmark.pdf" 1785126318.7075 15139 4749c9c2d529c53947b08e04ab81a7ad ""
-  "figures/fig_dynamic_sensitivity.pdf" 1785126318.5995 19958 259db374f06abbf6459b8e4f7c3ea5af ""
-  "figures/fig_pyth_scale.pdf" 1785126184.26227 15510 bc4c2cb1ff1fa1294ac4e6ccbc8c8757 ""
-  "main_AAAI.aux" 1785143396.52048 3838 3dcfcb0092cb800b1138205610e1f7a5 "pdflatex"
-  "main_AAAI.bbl" 1785143218.72344 5180 430b4e30f716dbd4a60e6510a1c0924b "bibtex main_AAAI"
-  "main_AAAI.tex" 1785143395.82448 71882 cbe0240501ddbd04fb58dbebff781214 ""
+  "aaai2027.sty" 1785237894.19649 16915 1b1c792e2acfbbd8b672259e267b95d8 ""
+  "figures/fig_rq2_four_heatmaps.pdf" 1785234029.38229 27803 b65accd375003eb40b12f2174ad53c16 ""
+  "figures/fig_rq3_scale_column.pdf" 1785234027.89029 23207 5edd0cb486e6e05305d5ff9068723c3e ""
+  "figures/fig_rq3_stress_column.pdf" 1785234028.78629 25020 beae029257537d9f2e6620535622f637 ""
+  "main_AAAI.aux" 1785238152.93718 3339 e28f6f5f36aadb3658a49ce416e6c021 "pdflatex"
+  "main_AAAI.bbl" 1785237982.82072 4867 b38543577522229510be19ed5ff6353a "bibtex main_AAAI"
+  "main_AAAI.tex" 1785238152.24118 91104 823318aecd027c6486184f4c8732e21f ""
   (generated)
   "main_AAAI.aux"
   "main_AAAI.log"
