@@ -1,4 +1,4 @@
-\begin{thebibliography}{17}
+\begin{thebibliography}{25}
 \providecommand{\natexlab}[1]{#1}
 
 \bibitem[{Akkerman, Mes, and van Jaarsveld(2025)}]{akkerman2025comparison}
@@ -6,10 +6,45 @@ Akkerman, F.; Mes, M.; and van Jaarsveld, W. 2025.
 \newblock A comparison of reinforcement learning policies for dynamic vehicle routing problems with stochastic customer requests.
 \newblock \emph{Computers \& Industrial Engineering}, 200: 110747.
 
+\bibitem[{Berto et~al.(2025{\natexlab{a}})Berto, Hua, Gast~Zepeda, Hottung, Wouda, Lan, Park, Tierney, and Park}]{berto2025routefinder}
+Berto, F.; Hua, C.; Gast~Zepeda, N.; Hottung, A.; Wouda, N.; Lan, L.; Park, J.; Tierney, K.; and Park, J. 2025{\natexlab{a}}.
+\newblock RouteFinder: Towards Foundation Models for Vehicle Routing Problems.
+\newblock \emph{Transactions on Machine Learning Research}.
+
+\bibitem[{Berto et~al.(2025{\natexlab{b}})Berto, Hua, Park et~al.}]{berto2025rl4co}
+Berto, F.; Hua, C.; Park, J.; et~al. 2025{\natexlab{b}}.
+\newblock {RL4CO}: An Extensive Reinforcement Learning for Combinatorial Optimization Benchmark.
+\newblock In \emph{Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining}, 5278--5289.
+
+\bibitem[{Bono et~al.(2021)Bono, Dibangoye, Simonin, Matignon, and Pereyron}]{bono2021mardam}
+Bono, G.; Dibangoye, J.~S.; Simonin, O.; Matignon, L.; and Pereyron, F. 2021.
+\newblock Solving Multi-Agent Routing Problems Using Deep Attention Mechanisms.
+\newblock \emph{IEEE Transactions on Intelligent Transportation Systems}, 22(12): 7804--7813.
+
+\bibitem[{Clarke and Wright(1964)}]{clarke1964scheduling}
+Clarke, G.; and Wright, J.~W. 1964.
+\newblock Scheduling of Vehicles from a Central Depot.
+\newblock \emph{Operations Research}, 12(4): 568--581.
+
+\bibitem[{Friedman(1937)}]{friedman1937ranks}
+Friedman, M. 1937.
+\newblock The use of ranks to avoid the assumption of normality implicit in the analysis of variance.
+\newblock \emph{Journal of the American Statistical Association}, 32(200): 675--701.
+
 \bibitem[{Gao et~al.(2023)Gao, Shang, Xue, Li, and Qian}]{gao2023towards}
 Gao, C.; Shang, H.; Xue, K.; Li, D.; and Qian, C. 2023.
 \newblock Towards generalizable neural solvers for vehicle routing problems via ensemble with transferrable local policy.
 \newblock \emph{arXiv preprint arXiv:2308.14104}.
+
+\bibitem[{Holm(1979)}]{holm1979sequential}
+Holm, S. 1979.
+\newblock A simple sequentially rejective multiple test procedure.
+\newblock \emph{Scandinavian Journal of Statistics}, 6(2): 65--70.
+
+\bibitem[{Hottung, Mahajan, and Tierney(2025)}]{hottung2025polynet}
+Hottung, A.; Mahajan, M.; and Tierney, K. 2025.
+\newblock PolyNet: Learning diverse solution strategies for neural combinatorial optimization.
+\newblock In \emph{International Conference on Learning Representations}.
 
 \bibitem[{Konovalenko and Hvattum(2024)}]{konovalenko2024optimizing}
 Konovalenko, A.; and Hvattum, L.~M. 2024.
@@ -25,11 +60,6 @@ Kool, W.; Van~Hoof, H.; and Welling, M. 2018.
 Kool, W.; van Hoof, H.; and Welling, M. 2019.
 \newblock Attention, Learn to Solve Routing Problems!
 \newblock In \emph{International Conference on Learning Representations (ICLR)}.
-
-\bibitem[{Li et~al.(2024)Li, Liu, Zheng, Zhang, and Wang}]{li2024cada}
-Li, H.; Liu, F.; Zheng, Z.; Zhang, Y.; and Wang, Z. 2024.
-\newblock CaDA: Cross-problem routing solver with constraint-aware dual-attention.
-\newblock \emph{arXiv preprint arXiv:2412.00346}.
 
 \bibitem[{Luo et~al.(2025)Luo, Lin, Wu, Wang, Tong, Yuan, and Zhang}]{luo2025boosting}
 Luo, F.; Lin, X.; Wu, Y.; Wang, Z.; Tong, X.; Yuan, M.; and Zhang, Q. 2025.
@@ -49,12 +79,17 @@ Nazari, M.; Oroojlooy, A.; Snyder, L.; and Tak{\'a}{\v{c}}, M. 2018.
 \bibitem[{Psaraftis(1988)}]{psaraftis1988dynamic}
 Psaraftis, H.~N. 1988.
 \newblock Dynamic vehicle routing problems.
-\newblock \emph{Vehicle routing: Methods and studies}, 16: 223--248.
+\newblock In Golden, B.~L.; and Assad, A.~A., eds., \emph{Vehicle Routing: Methods and Studies}, volume~16 of \emph{Studies in Management Science and Systems}, 223--248. Amsterdam, The Netherlands: North-Holland.
 
 \bibitem[{Shahbazian et~al.(2025)Shahbazian, Ciacco, Macrina, and Guerriero}]{shahbazian2025knowledge}
 Shahbazian, R.; Ciacco, A.; Macrina, G.; and Guerriero, F. 2025.
 \newblock Knowledge-guided hybrid deep reinforcement learning for the dynamic multi-depot electric vehicle routing problem.
 \newblock \emph{Computers \& Operations Research}, 107217.
+
+\bibitem[{Solomon(1987)}]{solomon1987algorithms}
+Solomon, M.~M. 1987.
+\newblock Algorithms for the vehicle routing and scheduling problems with time window constraints.
+\newblock \emph{Operations Research}, 35(2): 254--265.
 
 \bibitem[{Tam et~al.(2026)Tam, Anh, Tung, {Huynh Thi Thanh}, and Vinh}]{TAM2026114234}
 Tam, N.~T.; Anh, N.~D.; Tung, D.~V.; {Huynh Thi Thanh}, B.; and Vinh, L.~T. 2026.
@@ -66,24 +101,29 @@ Toth, P.; and Vigo, D. 2014.
 \newblock \emph{Vehicle routing: problems, methods, and applications}.
 \newblock SIAM.
 
-\bibitem[{Vaswani, Shazeer, and Parmar(2017)}]{vaswani2017attention}
-Vaswani, A.; Shazeer, N.; and Parmar, N. 2017.
-\newblock Attention is all you need.
-\newblock \emph{NeurIPS}.
-
-\bibitem[{Wang et~al.(2024)Wang, Cao, Wu, Teng, and Wu}]{wang2024deep}
-Wang, C.; Cao, Z.; Wu, Y.; Teng, L.; and Wu, G. 2024.
+\bibitem[{Wang et~al.(2025)Wang, Cao, Wu, Teng, and Wu}]{wang2024deep}
+Wang, C.; Cao, Z.; Wu, Y.; Teng, L.; and Wu, G. 2025.
 \newblock Deep reinforcement learning for solving vehicle routing problems with backhauls.
 \newblock \emph{IEEE Transactions on Neural Networks and Learning Systems}, 36(3): 4779--4793.
 
-\bibitem[{Xia et~al.(2025)Xia, Jin, Huang, Hu, Huo, Wang, Feng, Li, and Li}]{xia2025multi}
-Xia, D.; Jin, Y.; Huang, M.; Hu, Y.; Huo, Y.; Wang, Z.; Feng, F.; Li, Y.; and Li, H. 2025.
-\newblock A multi-head adaptive actor-critic algorithm for solving vehicle routing problems.
-\newblock \emph{Applied Intelligence}, 55(13): 908.
+\bibitem[{Wilcoxon(1945)}]{wilcoxon1945ranking}
+Wilcoxon, F. 1945.
+\newblock Individual comparisons by ranking methods.
+\newblock \emph{Biometrics Bulletin}, 1(6): 80--83.
+
+\bibitem[{Williams(1992)}]{williams1992simple}
+Williams, R.~J. 1992.
+\newblock Simple statistical gradient-following algorithms for connectionist reinforcement learning.
+\newblock \emph{Machine Learning}, 8(3--4): 229--256.
 
 \bibitem[{Zhang et~al.(2020)Zhang, He, Zhang, Lin, and Li}]{zhang2020multi}
 Zhang, K.; He, F.; Zhang, Z.; Lin, X.; and Li, M. 2020.
 \newblock Multi-vehicle routing problems with soft time windows: A multi-agent reinforcement learning approach.
 \newblock \emph{Transportation Research Part C: Emerging Technologies}, 121: 102861.
+
+\bibitem[{Zhou et~al.(2024)Zhou, Cao, Wu, Song, Ma, Zhang, and Chi}]{zhou2024mvmoe}
+Zhou, J.; Cao, Z.; Wu, Y.; Song, W.; Ma, Y.; Zhang, J.; and Chi, X. 2024.
+\newblock {MVMoE}: Multi-Task Vehicle Routing Solver with Mixture-of-Experts.
+\newblock In \emph{Proceedings of the 41st International Conference on Machine Learning}, volume 235 of \emph{Proceedings of Machine Learning Research}, 61804--61824.
 
 \end{thebibliography}

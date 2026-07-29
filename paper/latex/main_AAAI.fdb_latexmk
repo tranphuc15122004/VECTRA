@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex main_AAAI"] 1785237846.96907 "main_AAAI.aux" "main_AAAI.bbl" "main_AAAI" 1785238153.06433 0
+["bibtex main_AAAI"] 1785323065.27382 "main_AAAI.aux" "main_AAAI.bbl" "main_AAAI" 1785323065.8818 0
   "../AuthorKit27/aaai2027.bst" 1785127835.50311 30207 bd248dfe461b9b2fc7481a44feafe197 ""
-  "./ref.bib" 1785126895.73007 18076 f8816aa0d08e0472ec9f7e937c1aacbd ""
-  "main_AAAI.aux" 1785238152.93718 3339 e28f6f5f36aadb3658a49ce416e6c021 "pdflatex"
+  "./ref.bib" 1785301393.58438 21683 ae84f8c4402dfb1d9ebdd5e5f307bb26 ""
+  "main_AAAI.aux" 1785323065.72322 3761 b345b03b78c4afd2361e407433942630 "pdflatex"
   (generated)
   "main_AAAI.bbl"
   "main_AAAI.blg"
   (rewritten before read)
-["pdflatex"] 1785238152.49195 "main_AAAI.tex" "main_AAAI.pdf" "main_AAAI" 1785238153.06458 0
+["pdflatex"] 1785323065.30447 "main_AAAI.tex" "main_AAAI.pdf" "main_AAAI" 1785323065.88212 0
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/newtx/ntx-ec-tlf.enc" 1698694482 2914 fdbc4a54b9bc76f4551b5303f2737d33 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/tex-gyre/q-ts1.enc" 1529098226 3124 3813fd4c981d99822890a2861b0d274c ""
@@ -38,7 +38,6 @@
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/tfm/public/newtx/ntx-Regular-tlf-t1.tfm" 1708895146 11580 86fb9f1fbe830bcc3e5ca9d9fb704e6b ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/tfm/public/tex-gyre/ts1-qtmr.tfm" 1255129411 1600 20cdf11dab97d5d39e847571f9314407 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb" 1248133631 34811 78b52f49e893bcba91bd7581cdc144c0 ""
-  "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb" 1248133631 32298 c6d25bb16d1eac01ebdc6d7084126a1e ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb" 1248133631 30251 6afa5cb1d0204815a708a080681d4674 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb" 1248133631 36299 5f9df58c2139e7edcf37c8fca4bd384d ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi5.pfb" 1248133631 37912 77d683123f92148345f3fc36a38d9ab1 ""
@@ -46,13 +45,11 @@
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb" 1248133631 36281 c355509802a035cadc5f15869451dcee ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb" 1248133631 36094 798f80770b3b148ceedd006d487db67c ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb" 1248133631 35752 024fb6c41858982481f6968b5fc26508 ""
-  "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb" 1248133631 31809 8670ca339bf94e56da1fc21c80635e2a ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb" 1248133631 32734 69e00a6b65cedb993666e42eedb3d48f ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb" 1248133631 32762 224316ccc9ad3ca0423a14971cfa7fc1 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb" 1248133631 33993 9b89b85fd2d9df0482bd47194d1d3bf3 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb" 1248133631 32569 5e5ddc8df908dea60932f3c484a54c0d ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy5.pfb" 1248133631 32915 7bf7720c61a5b3a7ff25b0964421c9b6 ""
-  "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb" 1248133631 32587 1788b0c1c5b39540c96f5e42ccd6dae8 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb" 1248133631 32716 08e384dc442464e7285e891af9f45947 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb" 1248133631 32442 c975af247b6702f7ca0c299af3616b80 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb" 1248133631 34694 ad62b13721ee8eda1dcc8993c8bd7041 ""
@@ -120,12 +117,13 @@
   "/home/tuantb/.TinyTeX/texmf-var/web2c/pdftex/pdflatex.fmt" 1781539024 2251004 4d5a3da8d468249d0f0f2fd979f5ca12 ""
   "/home/tuantb/.TinyTeX/texmf.cnf" 1780461603 637 edd806fb06a89761a6034e1968af9017 ""
   "aaai2027.sty" 1785237894.19649 16915 1b1c792e2acfbbd8b672259e267b95d8 ""
-  "figures/fig_rq2_four_heatmaps.pdf" 1785234029.38229 27803 b65accd375003eb40b12f2174ad53c16 ""
-  "figures/fig_rq3_scale_column.pdf" 1785234027.89029 23207 5edd0cb486e6e05305d5ff9068723c3e ""
-  "figures/fig_rq3_stress_column.pdf" 1785234028.78629 25020 beae029257537d9f2e6620535622f637 ""
-  "main_AAAI.aux" 1785238152.93718 3339 e28f6f5f36aadb3658a49ce416e6c021 "pdflatex"
-  "main_AAAI.bbl" 1785237982.82072 4867 b38543577522229510be19ed5ff6353a "bibtex main_AAAI"
-  "main_AAAI.tex" 1785238152.24118 91104 823318aecd027c6486184f4c8732e21f ""
+  "figures/COAST_final.drawio.pdf" 1785266889.71687 124023 fff4e286bf5e9e63085d14166681fdd2 ""
+  "figures/fig_rq2_four_heatmaps.pdf" 1785307780.62461 27397 0165a1d226a0e6989bc99127f034b32d ""
+  "figures/fig_rq3_scale_column.pdf" 1785270792.99449 23207 d07dd83bfa90b78f2ba3166625807372 ""
+  "figures/fig_rq3_stress_column.pdf" 1785270794.05049 25020 be5340674ab66bd86a8202efc4061073 ""
+  "main_AAAI.aux" 1785323065.72322 3761 b345b03b78c4afd2361e407433942630 "pdflatex"
+  "main_AAAI.bbl" 1785323065.29521 7310 e5acf10a9a84f047198f4db7399af4b1 "bibtex main_AAAI"
+  "main_AAAI.tex" 1785323064.2672 43980 ca1bbeba465a543a5e1311de7b2cff37 ""
   (generated)
   "main_AAAI.aux"
   "main_AAAI.log"
