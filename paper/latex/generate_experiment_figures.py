@@ -563,7 +563,7 @@ def make_rq2_four_heatmaps() -> None:
                 ax.text(col, row, f"{value:.1f}", ha="center", va="center", fontsize=5.8,
                         fontweight="bold", color="white" if value > (vmin + vmax) / 2 else "#333333")
 
-    cbar = fig.colorbar(im, ax=axes, orientation="horizontal", fraction=0.045, pad=0.10)
+    cbar = fig.colorbar(im, ax=axes, orientation="vertical", fraction=0.025, pad=0.025, shrink=0.42)
     cbar.set_label("Normalized cost", fontsize=7)
     cbar.ax.tick_params(labelsize=6.5)
     save(fig, "fig_rq2_four_heatmaps.pdf")
