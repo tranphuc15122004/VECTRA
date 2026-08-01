@@ -1,4 +1,16 @@
-torch
-scipy
-matplotlib
-tqdm
+# Validated with Python 3.13 and PyTorch 2.6.0+cu124.
+# Install the PyTorch build appropriate for the target CPU/CUDA platform.
+
+# Core training and inference
+torch==2.6.0
+numpy==2.3.4
+scipy==1.16.3
+tqdm==4.67.1
+
+# Analysis and figure generation
+matplotlib==3.10.7
+pandas==2.3.3
+openpyxl==3.1.5
+
+# Classical OR-Tools baseline
+ortools==9.14.6206

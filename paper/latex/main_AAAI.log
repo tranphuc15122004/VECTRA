@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.6.15)  29 JUL 2026 11:04
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.6.15)  1 AUG 2026 03:57
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -372,11 +372,14 @@ Package pdftex.def Info: figures/fig_rq3_scale_column.pdf  used on input line 40
 File: figures/fig_rq3_stress_column.pdf Graphic file (type pdf)
 <use figures/fig_rq3_stress_column.pdf>
 Package pdftex.def Info: figures/fig_rq3_stress_column.pdf  used on input line 409.
-(pdftex.def)             Requested size: 179.54578pt x 165.53554pt.
+(pdftex.def)             Requested size: 203.48668pt x 187.606pt.
 
 Underfull \vbox (badness 1635) has occurred while \output is active []
 
- [6] (./main_AAAI.bbl [7 <./figures/fig_rq2_four_heatmaps.pdf> <./figures/fig_rq3_scale_column.pdf> <./figures/fig_rq3_stress_column.pdf>]) [8] (./main_AAAI.aux)
+ [6] (./main_AAAI.bbl
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [7 <./figures/fig_rq2_four_heatmaps.pdf> <./figures/fig_rq3_scale_column.pdf> <./figures/fig_rq3_stress_column.pdf>]) [8] (./main_AAAI.aux)
  ***********
 LaTeX2e <2026-06-01>
 L3 programming layer <2020/03/25>
@@ -391,7 +394,7 @@ Here is how much of TeX's memory you used:
  14 hyphenation exceptions out of 8191
  89i,16n,117p,1562b,384s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi5.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy5.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/tex-gyre/qtmr.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/urw/courier/ucrr8a.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/newtx/ztmb.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/newtx/ztmr.pfb></home/tuantb/.TinyTeX/texmf-dist/fonts/type1/public/newtx/ztmri.pfb>
-Output written on main_AAAI.pdf (8 pages, 505659 bytes).
+Output written on main_AAAI.pdf (8 pages, 505643 bytes).
 PDF statistics:
  389 PDF objects out of 1000 (max. 8388607)
  147 compressed objects within 2 object streams

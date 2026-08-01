@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex main_AAAI"] 1785323065.27382 "main_AAAI.aux" "main_AAAI.bbl" "main_AAAI" 1785323065.8818 0
+["bibtex main_AAAI"] 1785556645.3637 "main_AAAI.aux" "main_AAAI.bbl" "main_AAAI" 1785556658.52127 0
   "../AuthorKit27/aaai2027.bst" 1785127835.50311 30207 bd248dfe461b9b2fc7481a44feafe197 ""
   "./ref.bib" 1785301393.58438 21683 ae84f8c4402dfb1d9ebdd5e5f307bb26 ""
-  "main_AAAI.aux" 1785323065.72322 3761 b345b03b78c4afd2361e407433942630 "pdflatex"
+  "main_AAAI.aux" 1785556658.3645 3761 b345b03b78c4afd2361e407433942630 "pdflatex"
   (generated)
   "main_AAAI.bbl"
   "main_AAAI.blg"
   (rewritten before read)
-["pdflatex"] 1785323065.30447 "main_AAAI.tex" "main_AAAI.pdf" "main_AAAI" 1785323065.88212 0
+["pdflatex"] 1785556657.9531 "main_AAAI.tex" "main_AAAI.pdf" "main_AAAI" 1785556658.5216 0
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/newtx/ntx-ec-tlf.enc" 1698694482 2914 fdbc4a54b9bc76f4551b5303f2737d33 ""
   "/home/tuantb/.TinyTeX/texmf-dist/fonts/enc/dvips/tex-gyre/q-ts1.enc" 1529098226 3124 3813fd4c981d99822890a2861b0d274c ""
@@ -121,9 +121,9 @@
   "figures/fig_rq2_four_heatmaps.pdf" 1785307780.62461 27397 0165a1d226a0e6989bc99127f034b32d ""
   "figures/fig_rq3_scale_column.pdf" 1785270792.99449 23207 d07dd83bfa90b78f2ba3166625807372 ""
   "figures/fig_rq3_stress_column.pdf" 1785270794.05049 25020 be5340674ab66bd86a8202efc4061073 ""
-  "main_AAAI.aux" 1785323065.72322 3761 b345b03b78c4afd2361e407433942630 "pdflatex"
-  "main_AAAI.bbl" 1785323065.29521 7310 e5acf10a9a84f047198f4db7399af4b1 "bibtex main_AAAI"
-  "main_AAAI.tex" 1785323064.2672 43980 ca1bbeba465a543a5e1311de7b2cff37 ""
+  "main_AAAI.aux" 1785556658.3645 3761 b345b03b78c4afd2361e407433942630 "pdflatex"
+  "main_AAAI.bbl" 1785556645.38047 7310 e5acf10a9a84f047198f4db7399af4b1 "bibtex main_AAAI"
+  "main_AAAI.tex" 1785556653.48849 43980 83e5b1c2ec117c69da860a214de57812 ""
   (generated)
   "main_AAAI.aux"
   "main_AAAI.log"
